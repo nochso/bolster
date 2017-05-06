@@ -1,4 +1,4 @@
-package bytesort
+package bytesort_test
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/kylelemons/godebug/pretty"
+	"github.com/nochso/bolster/bytesort"
 	"github.com/nochso/bolster/internal"
 )
 
@@ -23,7 +24,7 @@ func BenchmarkEncode(b *testing.B) {
 		b.Run(name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				for _, v := range values {
-					Encode(v)
+					bytesort.Encode(v)
 				}
 			}
 		})
@@ -36,7 +37,7 @@ func BenchmarkEncode_parallel(b *testing.B) {
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
 					for _, v := range values {
-						Encode(v)
+						bytesort.Encode(v)
 					}
 				}
 			})
@@ -54,7 +55,7 @@ func TestEncode_error(t *testing.T) {
 	for _, tc := range encodeErrorTests {
 		name := fmt.Sprintf("%T(%v)", tc, tc)
 		t.Run(name, func(t *testing.T) {
-			_, err := Encode(tc)
+			_, err := bytesort.Encode(tc)
 			if err == nil {
 				t.Error("expected error, got nil")
 			} else {
@@ -210,7 +211,7 @@ func testEncodeSortability(t *testing.T, values []interface{}) {
 	exp := make([][]byte, 0, len(values))
 	act := make([][]byte, 0, len(values))
 	for _, v := range values {
-		b, err := Encode(v)
+		b, err := bytesort.Encode(v)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -259,7 +260,7 @@ func TestEncode(t *testing.T) {
 func testEncode(t *testing.T, values []interface{}) {
 	act := &bytes.Buffer{}
 	for _, v := range values {
-		b, err := Encode(v)
+		b, err := bytesort.Encode(v)
 		if err != nil {
 			t.Error(err)
 		}
@@ -273,7 +274,7 @@ func TestEncode_fixedLengthExceptForStrings(t *testing.T) {
 		t.Run(typ, func(t *testing.T) {
 			length := -1
 			for _, v := range values {
-				b, err := Encode(v)
+				b, err := bytesort.Encode(v)
 				if err != nil {
 					t.Error(err)
 				}
