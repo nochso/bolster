@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/kylelemons/godebug/diff"
+	"github.com/nochso/bolster"
 )
 
 func Gold(t *testing.T, actual []byte, update bool) {
@@ -33,5 +34,28 @@ func Gold(t *testing.T, actual []byte, update bool) {
 	}
 	if !bytes.Equal(exp, actual) {
 		t.Error("-Actual +Expected\n" + diff.Diff(string(actual), string(exp)))
+	}
+}
+
+// OpenTestStore returns a fresh store for testing and a function to close and delete it.
+func OpenTestStore(t *testing.T) (*bolster.Store, func()) {
+	dir, err := ioutil.TempDir("", "bolster_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "bolster.db")
+	st, err := bolster.Open(path, 0644, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st, func() {
+		err := st.Close()
+		if err != nil {
+			t.Log(err)
+		}
+		err = os.RemoveAll(dir)
+		if err != nil {
+			t.Log(err)
+		}
 	}
 }
