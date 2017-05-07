@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/boltdb/bolt"
+	"github.com/nochso/bolster/bytesort"
 )
 
 const (
@@ -76,6 +77,10 @@ func newTypeInfo(t reflect.Type) (typeInfo, error) {
 		Type:     t,
 	}
 	err := ti.validateIDField()
+	if err != nil {
+		return *ti, err
+	}
+	err = ti.validateBytesort()
 	return *ti, err
 }
 
@@ -95,6 +100,16 @@ func (ti *typeInfo) validateIDField() error {
 		return nil
 	}
 	return fmt.Errorf("%v: unable to find ID field: field has to be named \"ID\" or tagged with `bolster:\"id\"`", ti)
+}
+
+func (ti *typeInfo) validateBytesort() error {
+	f := ti.Type.Field(ti.IDField)
+	zv := reflect.Zero(f.Type)
+	_, err := bytesort.Encode(zv.Interface())
+	if err != nil {
+		err = fmt.Errorf("%v: ID field %q is not byte encodable: %s", ti, f.Name, err)
+	}
+	return err
 }
 
 func (ti typeInfo) String() string {
