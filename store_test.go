@@ -63,6 +63,12 @@ func TestStore_Register(t *testing.T) {
 		} else {
 			t.Log(err)
 		}
+		err = st.Register(structWithID{}, structWithID{})
+		if err == nil {
+			t.Errorf("expected error, got %v", err)
+		} else {
+			t.Log(err)
+		}
 	})
 	t.Run("structWithTaggedID", func(t *testing.T) {
 		err := st.Register(structWithTaggedID{})

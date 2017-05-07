@@ -8,6 +8,7 @@ import (
 
 	"github.com/boltdb/bolt"
 	"github.com/nochso/bolster/bytesort"
+	"github.com/nochso/bolster/errlist"
 )
 
 const (
@@ -37,13 +38,11 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) Register(v ...interface{}) error {
+	errs := errlist.New()
 	for _, vv := range v {
-		err := s.register(vv)
-		if err != nil {
-			return err
-		}
+		errs = errs.Append(s.register(vv))
 	}
-	return nil
+	return errs.ErrorOrNil()
 }
 
 func (s *Store) register(v interface{}) error {
