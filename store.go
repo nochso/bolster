@@ -8,6 +8,8 @@ import (
 
 	"github.com/boltdb/bolt"
 	"github.com/nochso/bolster/bytesort"
+	"github.com/nochso/bolster/codec"
+	"github.com/nochso/bolster/codec/json"
 	"github.com/nochso/bolster/errlist"
 )
 
@@ -17,6 +19,7 @@ const (
 )
 
 type Store struct {
+	codec codec.Interface
 	db    *bolt.DB
 	types map[reflect.Type]typeInfo
 }
@@ -27,6 +30,7 @@ func Open(path string, mode os.FileMode, options *bolt.Options) (*Store, error) 
 		return nil, err
 	}
 	st := &Store{
+		codec: json.Codec,
 		db:    db,
 		types: make(map[reflect.Type]typeInfo),
 	}
@@ -35,6 +39,28 @@ func Open(path string, mode os.FileMode, options *bolt.Options) (*Store, error) 
 
 func (s *Store) Close() error {
 	return s.db.Close()
+}
+
+func (s *Store) Read(fn func(*Tx) error) error {
+	return s.db.View(func(btx *bolt.Tx) error {
+		tx := &Tx{btx: btx, store: s}
+		err := fn(tx)
+		if err != nil {
+			return err
+		}
+		return tx.errs.ErrorOrNil()
+	})
+}
+
+func (s *Store) Write(fn func(*Tx) error) error {
+	return s.db.Update(func(btx *bolt.Tx) error {
+		tx := &Tx{btx: btx, store: s}
+		err := fn(tx)
+		if err != nil {
+			return err
+		}
+		return tx.errs.ErrorOrNil()
+	})
 }
 
 func (s *Store) Register(v ...interface{}) error {
@@ -61,7 +87,10 @@ func (s *Store) register(v interface{}) error {
 		return err
 	}
 	s.types[ti.Type] = ti
-	return nil
+	return s.Write(func(tx *Tx) error {
+		_, err := tx.btx.CreateBucketIfNotExists(ti.FullName)
+		return err
+	})
 }
 
 type typeInfo struct {
