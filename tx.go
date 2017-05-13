@@ -1,6 +1,7 @@
 package bolster
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -23,12 +24,17 @@ const (
 	update
 	upsert
 	delete
+	get
+)
+
+var (
+	ErrNotFound = errors.New("item not found")
 )
 
 func (tx *Tx) validateStruct(v interface{}, action txAction) (typeInfo, reflect.Value, error) {
 	rv := reflect.ValueOf(v)
 	rt := rv.Type()
-	if action == insert || action == update || action == upsert {
+	if action == insert || action == update || action == upsert || action == get {
 		if rt.Kind() != reflect.Ptr {
 			return typeInfo{}, rv, fmt.Errorf("expected pointer to struct, got %v", rt.Kind())
 		}
@@ -74,4 +80,22 @@ func (tx *Tx) Insert(v interface{}) error {
 	err = bkt.Put(idBytes, structBytes)
 	tx.errs = tx.errs.Append(err)
 	return err
+}
+
+func (tx *Tx) Get(v interface{}, id interface{}) error {
+	ti, _, err := tx.validateStruct(v, get)
+	if err != nil {
+		return err
+	}
+	// TODO Check type of id for compatibility
+	idBytes, err := bytesort.Encode(id)
+	if err != nil {
+		return err
+	}
+	bkt := tx.btx.Bucket(ti.FullName)
+	b := bkt.Get(idBytes)
+	if b == nil {
+		return ErrNotFound
+	}
+	return tx.store.codec.Unmarshal(b, v)
 }
