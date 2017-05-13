@@ -59,7 +59,7 @@ func (tx *Tx) Insert(v interface{}) error {
 
 	bkt := tx.btx.Bucket(ti.FullName)
 	if bkt.Get(idBytes) != nil {
-		err = fmt.Errorf("Insert: %s: item with ID %q already exists", ti, rv.Field(ti.IDField).Interface())
+		err = fmt.Errorf("Insert: %s: item with ID %q already exists", ti, fmt.Sprintf("%v", rv.Field(ti.IDField).Interface()))
 		tx.errs = tx.errs.Append(err)
 		return err
 	}
