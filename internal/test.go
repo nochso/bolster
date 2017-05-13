@@ -64,6 +64,10 @@ func OpenTestStore(t *testing.T) (*bolster.Store, func()) {
 	}
 }
 
+func GoldStore(t *testing.T, st *bolster.Store, update bool) {
+	Gold(t, DumpStore(st), update)
+}
+
 // DumpStore returns a dump containing all buckets and items.
 func DumpStore(st *bolster.Store) []byte {
 	buf := &bytes.Buffer{}
