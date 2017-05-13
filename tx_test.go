@@ -104,6 +104,52 @@ func TestTx_Insert_withoutAutoincrement(t *testing.T) {
 	})
 }
 
+type structWithAutoincrement struct {
+	ID int `bolster:"inc"`
+}
+
+func TestTx_Insert_withAutoincrement(t *testing.T) {
+	st, closer := internal.OpenTestStore(t)
+	defer closer()
+
+	err := st.Register(structWithAutoincrement{})
+	if err != nil {
+		t.Error(err)
+	}
+	t.Run("single", func(t *testing.T) {
+		exp := &structWithAutoincrement{ID: 1}
+		act := &structWithAutoincrement{}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Insert(act)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		if !reflect.DeepEqual(exp, act) {
+			t.Error(pretty.Compare(act, exp))
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("multipleInSingleTransaction", func(t *testing.T) {
+		actuals := make([]structWithAutoincrement, 4)
+		err = st.Write(func(tx *bolster.Tx) error {
+			for i, _ := range actuals {
+				tx.Insert(&actuals[i])
+			}
+			return nil
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		for _, act := range actuals {
+			if act.ID == 0 {
+				t.Errorf("expected ID of struct to be set, got %d", act.ID)
+			}
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+}
+
 func TestTx_Get(t *testing.T) {
 	st, closer := internal.OpenTestStore(t)
 	defer closer()

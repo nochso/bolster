@@ -60,13 +60,30 @@ func (tx *Tx) Insert(v interface{}) error {
 		return err
 	}
 
+	bkt := tx.btx.Bucket(ti.FullName)
+	if ti.AutoIncrement {
+		idType := rv.Field(ti.IDField).Type()
+		zero := reflect.Zero(idType).Interface()
+		if zero == rv.Field(ti.IDField).Interface() {
+			seq, err := bkt.NextSequence()
+			if err != nil {
+				tx.errs = tx.errs.Append(err)
+				return err
+			}
+			seqRV := reflect.ValueOf(seq)
+			if !seqRV.Type().ConvertibleTo(idType) {
+				return fmt.Errorf("Insert: %s: unable to convert autoincremented ID of type %s to %s", ti, seqRV.Type(), idType)
+			}
+			rv.Field(ti.IDField).Set(seqRV.Convert(idType))
+		}
+	}
+
 	idBytes, err := bytesort.Encode(rv.Field(ti.IDField).Interface())
 	if err != nil {
 		tx.errs = tx.errs.Append(err)
 		return err
 	}
 
-	bkt := tx.btx.Bucket(ti.FullName)
 	if bkt.Get(idBytes) != nil {
 		err = fmt.Errorf("Insert: %s: item with ID %q already exists", ti, fmt.Sprintf("%v", rv.Field(ti.IDField).Interface()))
 		tx.errs = tx.errs.Append(err)
