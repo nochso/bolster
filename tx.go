@@ -52,6 +52,22 @@ func (tx *Tx) validateStruct(v interface{}, action txAction) (typeInfo, reflect.
 	return ti, rv, nil
 }
 
+// Truncate deletes all items of v's type.
+func (tx *Tx) Truncate(v interface{}) error {
+	if tx.errs.ErrorOrNil() != nil {
+		return tx.errs
+	}
+	ti, _, err := tx.validateStruct(v, delete)
+	if err != nil {
+		tx.errs = tx.errs.Append(err)
+		return err
+	}
+	tx.errs = tx.errs.Append(tx.btx.DeleteBucket(ti.FullName))
+	_, err = tx.btx.CreateBucket(ti.FullName)
+	tx.errs = tx.errs.Append(err)
+	return tx.errs.ErrorOrNil()
+}
+
 // Insert saves a new item.
 func (tx *Tx) Insert(v interface{}) error {
 	ti, rv, err := tx.validateStruct(v, insert)

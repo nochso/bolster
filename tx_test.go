@@ -131,8 +131,9 @@ func TestTx_Insert_withAutoincrement(t *testing.T) {
 		internal.GoldStore(t, st, *updateGold)
 	})
 	t.Run("multipleInSingleTransaction", func(t *testing.T) {
-		actuals := make([]structWithAutoincrement, 4)
+		actuals := make([]structWithAutoincrement, 5)
 		err = st.Write(func(tx *bolster.Tx) error {
+			tx.Truncate(actuals[0])
 			for i := range actuals {
 				tx.Insert(&actuals[i])
 			}
@@ -151,6 +152,12 @@ func TestTx_Insert_withAutoincrement(t *testing.T) {
 	// TODO Add tests with more int/uint types
 	t.Run("overflowID", func(t *testing.T) {
 		err := st.Write(func(tx *bolster.Tx) error {
+			return tx.Truncate(structWithAutoincrement{})
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		err = st.Write(func(tx *bolster.Tx) error {
 			for i := 0; i < 256; i++ {
 				err := tx.Insert(&structWithAutoincrement{})
 				if err != nil {
