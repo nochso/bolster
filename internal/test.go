@@ -18,7 +18,6 @@ import (
 
 func Gold(t *testing.T, actual []byte, update bool) {
 	name := strings.TrimPrefix(t.Name(), "Test") + ".golden"
-	name = strings.Replace(name, "_", "/", -1)
 	path := filepath.Join("test-fixtures", name)
 	err := os.MkdirAll(filepath.Dir(path), 0755)
 	if err != nil {
