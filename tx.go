@@ -77,46 +77,22 @@ func (tx *Tx) Insert(v interface{}) error {
 	}
 
 	bkt := tx.btx.Bucket(ti.FullName)
+	id := rv.Field(ti.IDField)
 	if ti.AutoIncrement {
-		idType := rv.Field(ti.IDField).Type()
-		zero := reflect.Zero(idType).Interface()
-		if zero == rv.Field(ti.IDField).Interface() {
-			seq, err := bkt.NextSequence()
-			if err != nil {
-				tx.errs = tx.errs.Append(err)
-				return err
-			}
-			seqRV := reflect.ValueOf(seq)
-			if !seqRV.Type().ConvertibleTo(idType) {
-				err = fmt.Errorf("Insert: %s: unable to convert autoincremented ID of type %s to %s", ti, seqRV.Type(), idType)
-				tx.errs = tx.errs.Append(err)
-				return err
-			}
-			var overflows bool
-			switch idType.Kind() {
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				signedSeq := int64(seq)
-				overflows = rv.Field(ti.IDField).OverflowInt(signedSeq)
-			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				overflows = rv.Field(ti.IDField).OverflowUint(seq)
-			}
-			if overflows {
-				err = fmt.Errorf("Insert: %s: next bucket sequence %d overflows ID field of type %s", ti, seq, idType)
-				tx.errs = tx.errs.Append(err)
-				return err
-			}
-			rv.Field(ti.IDField).Set(seqRV.Convert(idType))
+		err = tx.autoincrement(id, bkt, ti)
+		if err != nil {
+			tx.errs = tx.errs.Append(err)
+			return err
 		}
 	}
-
-	idBytes, err := bytesort.Encode(rv.Field(ti.IDField).Interface())
+	idBytes, err := bytesort.Encode(id.Interface())
 	if err != nil {
 		tx.errs = tx.errs.Append(err)
 		return err
 	}
 
 	if bkt.Get(idBytes) != nil {
-		err = fmt.Errorf("Insert: %s: item with ID %q already exists", ti, fmt.Sprintf("%v", rv.Field(ti.IDField).Interface()))
+		err = fmt.Errorf("Insert: %s: item with ID %q already exists", ti, fmt.Sprintf("%v", id.Interface()))
 		tx.errs = tx.errs.Append(err)
 		return err
 	}
@@ -129,6 +105,39 @@ func (tx *Tx) Insert(v interface{}) error {
 	err = bkt.Put(idBytes, structBytes)
 	tx.errs = tx.errs.Append(err)
 	return err
+}
+
+func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, ti typeInfo) error {
+	idType := id.Type()
+	zero := reflect.Zero(idType).Interface()
+	if id.Interface() != zero {
+		return nil
+	}
+	seq, err := bkt.NextSequence()
+	if err != nil {
+		tx.errs = tx.errs.Append(err)
+		return err
+	}
+	seqRV := reflect.ValueOf(seq)
+	if !seqRV.Type().ConvertibleTo(idType) {
+		err = fmt.Errorf("Insert: %s: unable to convert autoincremented ID of type %s to %s", ti, seqRV.Type(), idType)
+		tx.errs = tx.errs.Append(err)
+		return err
+	}
+	var overflows bool
+	if idType.Kind() >= reflect.Int && idType.Kind() <= reflect.Int64 {
+		signedSeq := int64(seq)
+		overflows = id.OverflowInt(signedSeq)
+	} else if idType.Kind() >= reflect.Uint && idType.Kind() <= reflect.Uint64 {
+		overflows = id.OverflowUint(seq)
+	}
+	if overflows {
+		err = fmt.Errorf("Insert: %s: next bucket sequence %d overflows ID field of type %s", ti, seq, idType)
+		tx.errs = tx.errs.Append(err)
+		return err
+	}
+	id.Set(seqRV.Convert(idType))
+	return nil
 }
 
 // Get fetches v by ID.
