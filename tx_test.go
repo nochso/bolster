@@ -52,6 +52,26 @@ func TestTx_Insert_withoutAutoincrement(t *testing.T) {
 		}
 		internal.GoldStore(t, st, *updateGold)
 	})
+	t.Run("withoutPointer", func(t *testing.T) {
+		err := st.Write(func(tx *bolster.Tx) error {
+			return tx.Insert(structWithID{})
+		})
+		if err == nil {
+			t.Error("expected error, got nil")
+		} else {
+			t.Log(err)
+		}
+	})
+	t.Run("pointerToNonStruct", func(t *testing.T) {
+		err := st.Write(func(tx *bolster.Tx) error {
+			return tx.Insert(new(int))
+		})
+		if err == nil {
+			t.Error("expected error, got nil")
+		} else {
+			t.Log(err)
+		}
+	})
 	t.Run("surrounding", func(t *testing.T) {
 		err := st.Write(func(tx *bolster.Tx) error {
 			for i := -5; i < 6; i++ {
