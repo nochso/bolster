@@ -142,4 +142,14 @@ func TestTx_Get(t *testing.T) {
 			t.Log(err)
 		}
 	})
+	t.Run("withoutPointer", func(t *testing.T) {
+		err := st.Read(func(tx *bolster.Tx) error {
+			return tx.Get(structWithID{}, "1")
+		})
+		if err == nil {
+			t.Error("expected error, got nil")
+		} else {
+			t.Log(err)
+		}
+	})
 }
