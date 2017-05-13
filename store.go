@@ -38,6 +38,10 @@ func Open(path string, mode os.FileMode, options *bolt.Options) (*Store, error) 
 	return st, nil
 }
 
+func (s *Store) Bolt() *bolt.DB {
+	return s.db
+}
+
 func (s *Store) Close() error {
 	return s.db.Close()
 }
