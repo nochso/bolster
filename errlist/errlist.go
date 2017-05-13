@@ -30,7 +30,7 @@ func (e Errors) Error() string {
 		return e[0].Error()
 	}
 	buf := &bytes.Buffer{}
-	fmt.Fprintf(buf, "%d errors occured:\n", len(e))
+	fmt.Fprintf(buf, "%d errors occurred:\n", len(e))
 	for _, err := range e {
 		fmt.Fprintf(buf, "* %s\n", err.Error())
 	}
