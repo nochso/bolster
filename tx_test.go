@@ -133,7 +133,7 @@ func TestTx_Insert_withAutoincrement(t *testing.T) {
 	t.Run("multipleInSingleTransaction", func(t *testing.T) {
 		actuals := make([]structWithAutoincrement, 4)
 		err = st.Write(func(tx *bolster.Tx) error {
-			for i, _ := range actuals {
+			for i := range actuals {
 				tx.Insert(&actuals[i])
 			}
 			return nil
