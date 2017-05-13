@@ -72,7 +72,22 @@ func (tx *Tx) Insert(v interface{}) error {
 			}
 			seqRV := reflect.ValueOf(seq)
 			if !seqRV.Type().ConvertibleTo(idType) {
-				return fmt.Errorf("Insert: %s: unable to convert autoincremented ID of type %s to %s", ti, seqRV.Type(), idType)
+				err = fmt.Errorf("Insert: %s: unable to convert autoincremented ID of type %s to %s", ti, seqRV.Type(), idType)
+				tx.errs = tx.errs.Append(err)
+				return err
+			}
+			var overflows bool
+			switch idType.Kind() {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				signedSeq := int64(seq)
+				overflows = rv.Field(ti.IDField).OverflowInt(signedSeq)
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				overflows = rv.Field(ti.IDField).OverflowUint(seq)
+			}
+			if overflows {
+				err = fmt.Errorf("Insert: %s: next bucket sequence %d overflows ID field of type %s", ti, seq, idType)
+				tx.errs = tx.errs.Append(err)
+				return err
 			}
 			rv.Field(ti.IDField).Set(seqRV.Convert(idType))
 		}

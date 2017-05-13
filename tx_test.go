@@ -105,7 +105,7 @@ func TestTx_Insert_withoutAutoincrement(t *testing.T) {
 }
 
 type structWithAutoincrement struct {
-	ID int `bolster:"inc"`
+	ID uint8 `bolster:"inc"`
 }
 
 func TestTx_Insert_withAutoincrement(t *testing.T) {
@@ -145,6 +145,24 @@ func TestTx_Insert_withAutoincrement(t *testing.T) {
 			if act.ID == 0 {
 				t.Errorf("expected ID of struct to be set, got %d", act.ID)
 			}
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	// TODO Add tests with more int/uint types
+	t.Run("overflowID", func(t *testing.T) {
+		err := st.Write(func(tx *bolster.Tx) error {
+			for i := 0; i < 256; i++ {
+				err := tx.Insert(&structWithAutoincrement{})
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err == nil {
+			t.Error("expected error, got nil")
+		} else {
+			t.Log(err)
 		}
 		internal.GoldStore(t, st, *updateGold)
 	})
