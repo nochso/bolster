@@ -18,6 +18,11 @@ type structWithTaggedID struct {
 	Name string `bolster:"id"`
 }
 
+type structWithMultipleTaggedIDs struct {
+	Name string `bolster:"id"`
+	ID   int    `bolster:"id"`
+}
+
 type structWithInvalidID struct {
 	ID map[string]string
 }
@@ -74,6 +79,14 @@ func TestStore_Register(t *testing.T) {
 		err := st.Register(structWithTaggedID{})
 		if err != nil {
 			t.Error(err)
+		}
+	})
+	t.Run("structWithMultipleTaggedIDs", func(t *testing.T) {
+		err := st.Register(structWithMultipleTaggedIDs{})
+		if err == nil {
+			t.Errorf("expected error, got %v", err)
+		} else {
+			t.Log(err)
 		}
 	})
 	t.Run("structWithInvalidID", func(t *testing.T) {
