@@ -6,6 +6,7 @@ import (
 	"github.com/nochso/bolster/codec"
 )
 
+// Codec wraps encoding/json.
 var Codec codec.Interface = jsonCodec{}
 
 type jsonCodec struct{}

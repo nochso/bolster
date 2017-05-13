@@ -28,6 +28,7 @@ const (
 )
 
 var (
+	// ErrNotFound is returned when a specific item could not be found.
 	ErrNotFound = errors.New("item not found")
 )
 

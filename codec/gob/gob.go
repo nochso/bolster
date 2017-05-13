@@ -9,6 +9,7 @@ import (
 )
 
 var (
+	// Codec wraps encoding/gob.
 	Codec    codec.Interface = gobCodec{}
 	bytePool                 = sync.Pool{
 		New: func() interface{} { return &bytes.Buffer{} },
