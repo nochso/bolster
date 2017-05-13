@@ -35,15 +35,15 @@ var (
 func (tx *Tx) validateStruct(v interface{}, action txAction) (typeInfo, reflect.Value, error) {
 	rv := reflect.ValueOf(v)
 	rt := rv.Type()
-	if action == insert || action == update || action == upsert || action == get {
-		if rt.Kind() != reflect.Ptr {
-			return typeInfo{}, rv, fmt.Errorf("expected pointer to struct, got %v", rt.Kind())
-		}
+	if rt.Kind() != reflect.Ptr && (action == insert || action == update || action == upsert || action == get) {
+		return typeInfo{}, rv, fmt.Errorf("expected pointer to struct, got %v", rt.Kind())
+	}
+	if rt.Kind() == reflect.Ptr {
 		rv = rv.Elem()
 		rt = rv.Type()
 	}
 	if rt.Kind() != reflect.Struct {
-		return typeInfo{}, rv, fmt.Errorf("expected pointer to struct, got pointer to %v", rt.Kind())
+		return typeInfo{}, rv, fmt.Errorf("expected struct, got %v", rt.Kind())
 	}
 	ti, ok := tx.store.types[rt]
 	if !ok {
