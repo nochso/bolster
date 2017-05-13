@@ -82,12 +82,17 @@ func (tx *Tx) Insert(v interface{}) error {
 	return err
 }
 
+// Get fetches v by ID.
 func (tx *Tx) Get(v interface{}, id interface{}) error {
 	ti, _, err := tx.validateStruct(v, get)
 	if err != nil {
 		return err
 	}
-	// TODO Check type of id for compatibility
+	actTypeID := reflect.TypeOf(id)
+	expTypeID := ti.Type.Field(ti.IDField).Type
+	if actTypeID != expTypeID {
+		return fmt.Errorf("Get: %s: incompatible type of ID: expected %v, got %v", ti, expTypeID, actTypeID)
+	}
 	idBytes, err := bytesort.Encode(id)
 	if err != nil {
 		return err
