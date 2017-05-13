@@ -19,12 +19,14 @@ const (
 	tagAutoIncrement = "inc"
 )
 
+// Store can store and retrieve structs.
 type Store struct {
 	codec codec.Interface
 	db    *bolt.DB
 	types map[reflect.Type]typeInfo
 }
 
+// Open creates and opens a Store.
 func Open(path string, mode os.FileMode, options *bolt.Options) (*Store, error) {
 	db, err := bolt.Open(path, mode, options)
 	if err != nil {
@@ -38,14 +40,19 @@ func Open(path string, mode os.FileMode, options *bolt.Options) (*Store, error) 
 	return st, nil
 }
 
+// Bolt returns the bolt.DB instance.
 func (s *Store) Bolt() *bolt.DB {
 	return s.db
 }
 
+// Close releases all database resources.
+// All transactions must be closed before closing the database.
 func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+// Read executes a function within the context of a managed read-only transaction.
+// Any error that is returned from the function is returned from the View() method.
 func (s *Store) Read(fn func(*Tx) error) error {
 	return s.db.View(func(btx *bolt.Tx) error {
 		tx := &Tx{btx: btx, store: s}
@@ -57,6 +64,11 @@ func (s *Store) Read(fn func(*Tx) error) error {
 	})
 }
 
+// Write executes a function within the context of a read-write managed transaction.
+// If no error is returned from the function then the transaction is committed.
+// If an error is returned then the entire transaction is rolled back.
+// Any error that is returned from the function or returned from the commit is
+// returned from the Write() method.
 func (s *Store) Write(fn func(*Tx) error) error {
 	return s.db.Update(func(btx *bolt.Tx) error {
 		tx := &Tx{btx: btx, store: s}
@@ -68,6 +80,8 @@ func (s *Store) Write(fn func(*Tx) error) error {
 	})
 }
 
+// Register validates struct types for later use.
+// Structs that have not been registered can not be used.
 func (s *Store) Register(v ...interface{}) error {
 	errs := errlist.New()
 	for _, vv := range v {

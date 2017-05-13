@@ -9,6 +9,7 @@ import (
 	"github.com/nochso/bolster/errlist"
 )
 
+// Tx is a read-only or read-write transaction.
 type Tx struct {
 	store *Store
 	btx   *bolt.Tx
@@ -44,6 +45,7 @@ func (tx *Tx) validateStruct(v interface{}, action txAction) (typeInfo, reflect.
 	return ti, rv, nil
 }
 
+// Insert saves a new item.
 func (tx *Tx) Insert(v interface{}) error {
 	ti, rv, err := tx.validateStruct(v, insert)
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/nochso/bolster"
 )
 
+// Gold compares actual to a golden file named after t.Name()
 func Gold(t *testing.T, actual []byte, update bool) {
 	name := strings.TrimPrefix(t.Name(), "Test") + ".golden"
 	path := filepath.Join("test-fixtures", name)
@@ -63,6 +64,7 @@ func OpenTestStore(t *testing.T) (*bolster.Store, func()) {
 	}
 }
 
+// GoldStore compares the contents of a Store to a golden file named after t.Name()
 func GoldStore(t *testing.T, st *bolster.Store, update bool) {
 	Gold(t, DumpStore(st), update)
 }
