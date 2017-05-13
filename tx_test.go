@@ -16,6 +16,16 @@ func TestTx_Insert_withoutAutoincrement(t *testing.T) {
 	st, closer := internal.OpenTestStore(t)
 	defer closer()
 
+	t.Run("withoutRegistration", func(t *testing.T) {
+		err := st.Write(func(tx *bolster.Tx) error {
+			return tx.Insert(&structWithID{})
+		})
+		if err == nil {
+			t.Error("expected error, got nil")
+		} else {
+			t.Log(err)
+		}
+	})
 	err := st.Register(structWithID{})
 	if err != nil {
 		t.Error(err)
