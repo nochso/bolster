@@ -17,7 +17,10 @@ import (
 	"github.com/nochso/bolster/internal"
 )
 
-var update = flag.Bool("update", false, "update golden test files")
+var (
+	update   = flag.Bool("update", false, "update golden test files")
+	location = time.FixedZone("UTC-4", -4*60*60)
+)
 
 func BenchmarkEncode(b *testing.B) {
 	for name, values := range sortTests {
@@ -181,21 +184,21 @@ var sortTests = map[string][]interface{}{
 	},
 	"time.Time": {
 		time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC),
-		time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC).Local(),
+		time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC).In(location),
 		time.Date(1970, time.January, 1, 0, 0, 0, 1, time.UTC),
-		time.Date(1970, time.January, 1, 0, 0, 0, 1, time.UTC).Local(),
+		time.Date(1970, time.January, 1, 0, 0, 0, 1, time.UTC).In(location),
 		time.Date(1970, time.January, 1, 0, 0, 1, 0, time.UTC),
-		time.Date(1970, time.January, 1, 0, 0, 1, 0, time.UTC).Local(),
+		time.Date(1970, time.January, 1, 0, 0, 1, 0, time.UTC).In(location),
 		time.Date(1970, time.January, 1, 0, 1, 0, 0, time.UTC),
-		time.Date(1970, time.January, 1, 0, 1, 0, 0, time.UTC).Local(),
+		time.Date(1970, time.January, 1, 0, 1, 0, 0, time.UTC).In(location),
 		time.Date(1970, time.January, 1, 1, 0, 0, 0, time.UTC),
-		time.Date(1970, time.January, 1, 1, 0, 0, 0, time.UTC).Local(),
+		time.Date(1970, time.January, 1, 1, 0, 0, 0, time.UTC).In(location),
 		time.Date(1970, time.January, 2, 0, 0, 0, 0, time.UTC),
-		time.Date(1970, time.January, 2, 0, 0, 0, 0, time.UTC).Local(),
+		time.Date(1970, time.January, 2, 0, 0, 0, 0, time.UTC).In(location),
 		time.Date(1970, time.February, 1, 0, 0, 0, 0, time.UTC),
-		time.Date(1970, time.February, 1, 0, 0, 0, 0, time.UTC).Local(),
+		time.Date(1970, time.February, 1, 0, 0, 0, 0, time.UTC).In(location),
 		time.Date(1971, time.January, 1, 0, 0, 0, 0, time.UTC),
-		time.Date(1971, time.January, 1, 0, 0, 0, 0, time.UTC).Local(),
+		time.Date(1971, time.January, 1, 0, 0, 0, 0, time.UTC).In(location),
 	},
 }
 
