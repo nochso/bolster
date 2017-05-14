@@ -29,7 +29,8 @@ const (
 
 var (
 	// ErrNotFound is returned when a specific item could not be found.
-	ErrNotFound = errors.New("item not found")
+	ErrNotFound       = errors.New("item not found")
+	ErrBadTransaction = errors.New("skipping write-action: transaction has already failed and will be rolled back")
 )
 
 func (tx *Tx) validateStruct(v interface{}, action txAction) (typeInfo, reflect.Value, error) {
@@ -54,8 +55,9 @@ func (tx *Tx) validateStruct(v interface{}, action txAction) (typeInfo, reflect.
 
 // Truncate deletes all items of v's type.
 func (tx *Tx) Truncate(v interface{}) error {
-	if tx.errs.ErrorOrNil() != nil {
-		return tx.errs
+	if tx.errs.HasError() {
+		tx.errs = tx.errs.Append(ErrBadTransaction)
+		return ErrBadTransaction
 	}
 	ti, _, err := tx.validateStruct(v, delete)
 	if err != nil {
@@ -70,6 +72,10 @@ func (tx *Tx) Truncate(v interface{}) error {
 
 // Insert saves a new item.
 func (tx *Tx) Insert(v interface{}) error {
+	if tx.errs.HasError() {
+		tx.errs = tx.errs.Append(ErrBadTransaction)
+		return ErrBadTransaction
+	}
 	ti, rv, err := tx.validateStruct(v, insert)
 	if err != nil {
 		tx.errs = tx.errs.Append(err)
@@ -115,14 +121,11 @@ func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, ti typeInfo) err
 	}
 	seq, err := bkt.NextSequence()
 	if err != nil {
-		tx.errs = tx.errs.Append(err)
 		return err
 	}
 	seqRV := reflect.ValueOf(seq)
 	if !seqRV.Type().ConvertibleTo(idType) {
-		err = fmt.Errorf("Insert: %s: unable to convert autoincremented ID of type %s to %s", ti, seqRV.Type(), idType)
-		tx.errs = tx.errs.Append(err)
-		return err
+		return fmt.Errorf("Insert: %s: unable to convert autoincremented ID of type %s to %s", ti, seqRV.Type(), idType)
 	}
 	var overflows bool
 	if idType.Kind() >= reflect.Int && idType.Kind() <= reflect.Int64 {
@@ -132,9 +135,7 @@ func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, ti typeInfo) err
 		overflows = id.OverflowUint(seq)
 	}
 	if overflows {
-		err = fmt.Errorf("Insert: %s: next bucket sequence %d overflows ID field of type %s", ti, seq, idType)
-		tx.errs = tx.errs.Append(err)
-		return err
+		return fmt.Errorf("Insert: %s: next bucket sequence %d overflows ID field of type %s", ti, seq, idType)
 	}
 	id.Set(seqRV.Convert(idType))
 	return nil
