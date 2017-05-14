@@ -23,9 +23,13 @@ const (
 	insert txAction = iota
 	update
 	upsert
-	delete
 	get
+	delete
 )
+
+func (a txAction) needsPointer() bool {
+	return a >= insert && a <= get
+}
 
 var (
 	// ErrNotFound is returned when a specific item could not be found.
@@ -36,7 +40,7 @@ var (
 func (tx *Tx) validateStruct(v interface{}, action txAction) (typeInfo, reflect.Value, error) {
 	rv := reflect.ValueOf(v)
 	rt := rv.Type()
-	if rt.Kind() != reflect.Ptr && (action == insert || action == update || action == upsert || action == get) {
+	if action.needsPointer() && rt.Kind() != reflect.Ptr {
 		return typeInfo{}, rv, fmt.Errorf("expected pointer to struct, got %v", rt.Kind())
 	}
 	if rt.Kind() == reflect.Ptr {
