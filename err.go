@@ -29,20 +29,6 @@ func (e Error) IsBadTransaction() bool {
 	return e.Err == ErrBadTransaction
 }
 
-func newError(a txAction, err error, ti ...typeInfo) error {
-	if err == nil {
-		return nil
-	}
-	e := Error{
-		Action: a,
-		Err:    err,
-	}
-	if len(ti) > 0 {
-		e.TypeInfo = ti[0]
-	}
-	return e
-}
-
 func newErrorFactory(a txAction, ti ...typeInfo) Error {
 	e := Error{Action: a}
 	if len(ti) > 0 {
