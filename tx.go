@@ -197,6 +197,37 @@ func (tx *Tx) Update(v interface{}) error {
 	return tx.addErr(err)
 }
 
+// Upsert either updates or inserts an item.
+func (tx *Tx) Upsert(v interface{}) error {
+	ti, rv, err := tx.validateStruct(v, upsert)
+	tx.errf = newErrorFactory(upsert, ti)
+	if tx.errs.HasError() {
+		return tx.addErr(ErrBadTransaction)
+	}
+	if err != nil {
+		return tx.addErr(err)
+	}
+	id := rv.Field(ti.IDField)
+	idBytes, err := bytesort.Encode(id.Interface())
+	if err != nil {
+		return tx.addErr(err)
+	}
+	bkt := tx.btx.Bucket(ti.FullName)
+	// if item does not exist we might have to autoincrement
+	if ti.AutoIncrement && bkt.Get(idBytes) == nil {
+		err = tx.autoincrement(id, bkt, ti)
+		if err != nil {
+			return tx.addErr(err)
+		}
+	}
+	structBytes, err := tx.store.codec.Marshal(v)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	err = bkt.Put(idBytes, structBytes)
+	return tx.addErr(err)
+}
+
 // Get fetches v by ID.
 func (tx *Tx) Get(v interface{}, id interface{}) error {
 	ti, _, err := tx.validateStruct(v, get)

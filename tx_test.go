@@ -366,3 +366,121 @@ func TestTx_Update(t *testing.T) {
 		internal.GoldStore(t, st, *updateGold)
 	})
 }
+
+type structWithIncrementingIDAndField struct {
+	ID   int `bolster:"inc"`
+	Name string
+}
+
+func TestTx_Upsert_withoutAutoincrement(t *testing.T) {
+	st, closer := internal.OpenTestStore(t)
+	defer closer()
+	err := st.Register(structWithIDAndField{})
+	if err != nil {
+		t.Error(err)
+	}
+	t.Run("existing", func(t *testing.T) {
+		exp := &structWithIDAndField{1, "foo"}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Insert(exp)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		exp.Name = "bar"
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Upsert(exp)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		act := &structWithIDAndField{}
+		err = st.Read(func(tx *bolster.Tx) error {
+			return tx.Get(act, 1)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		if !reflect.DeepEqual(act, exp) {
+			t.Error(pretty.Compare(act, exp))
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("missing", func(t *testing.T) {
+		item := &structWithIDAndField{123, "foo"}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Truncate(item)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Upsert(item)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+}
+
+func TestTx_Upsert_withAutoincrement(t *testing.T) {
+	st, closer := internal.OpenTestStore(t)
+	defer closer()
+	err := st.Register(structWithIncrementingIDAndField{})
+	if err != nil {
+		t.Error(err)
+	}
+	t.Run("existing", func(t *testing.T) {
+		exp := &structWithIncrementingIDAndField{1, "foo"}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Insert(exp)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		exp.Name = "bar"
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Upsert(exp)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("missing", func(t *testing.T) {
+		item := &structWithIncrementingIDAndField{123, "foo"}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Truncate(item)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Upsert(item)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("missing_autoincrement", func(t *testing.T) {
+		item := &structWithIncrementingIDAndField{0, "foo"}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Truncate(item)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Upsert(item)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		if item.ID == 0 {
+			t.Error("expected item with autoincremented ID, got zero value")
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+}
