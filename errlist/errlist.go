@@ -30,6 +30,11 @@ func (e Errors) ErrorOrNil() error {
 	return e
 }
 
+// HasError returns true if the list contains at least one error.
+func (e Errors) HasError() bool {
+	return len(e) > 0
+}
+
 // Error implements the error interface.
 // A single error is formatted as usual.
 // Multiple errors are formatted per line with a summary of the error count.
