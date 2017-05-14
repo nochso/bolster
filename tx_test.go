@@ -294,4 +294,16 @@ func TestTx_Delete(t *testing.T) {
 		}
 		internal.GoldStore(t, st, *updateGold)
 	})
+	t.Run("firstInSameTransaction", func(t *testing.T) {
+		err := st.Write(func(tx *bolster.Tx) error {
+			tx.Truncate(structWithID{})
+			tx.Insert(&structWithID{3})
+			tx.Insert(&structWithID{4})
+			return tx.Delete(&structWithID{3})
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
 }
