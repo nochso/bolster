@@ -307,3 +307,62 @@ func TestTx_Delete(t *testing.T) {
 		internal.GoldStore(t, st, *updateGold)
 	})
 }
+
+type structWithIDAndField struct {
+	ID   int
+	Name string
+}
+
+func TestTx_Update(t *testing.T) {
+	st, closer := internal.OpenTestStore(t)
+	defer closer()
+	err := st.Register(structWithIDAndField{})
+	if err != nil {
+		t.Error(err)
+	}
+	t.Run("existing", func(t *testing.T) {
+		exp := &structWithIDAndField{1, "foo"}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Insert(exp)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		exp.Name = "bar"
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Update(exp)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		act := &structWithIDAndField{}
+		err = st.Read(func(tx *bolster.Tx) error {
+			return tx.Get(act, 1)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		if !reflect.DeepEqual(act, exp) {
+			t.Error(pretty.Compare(act, exp))
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("missing", func(t *testing.T) {
+		item := &structWithIDAndField{123, "foo"}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Truncate(item)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Update(item)
+		})
+		if err == nil {
+			t.Error("expected error, got nil")
+		} else {
+			t.Log(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+}

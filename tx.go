@@ -167,6 +167,36 @@ func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, ti typeInfo) err
 	return nil
 }
 
+// Update overwrites an existing item.
+//
+// If the item does not exist, an error is returned.
+func (tx *Tx) Update(v interface{}) error {
+	ti, rv, err := tx.validateStruct(v, update)
+	tx.errf = newErrorFactory(update, ti)
+	if tx.errs.HasError() {
+		return tx.addErr(ErrBadTransaction)
+	}
+	if err != nil {
+		return tx.addErr(err)
+	}
+	bkt := tx.btx.Bucket(ti.FullName)
+	id := rv.Field(ti.IDField)
+	idBytes, err := bytesort.Encode(id.Interface())
+	if err != nil {
+		return tx.addErr(err)
+	}
+	if bkt.Get(idBytes) == nil {
+		err = fmt.Errorf("item with ID %q does not exist", fmt.Sprintf("%v", id.Interface()))
+		return tx.addErr(err)
+	}
+	structBytes, err := tx.store.codec.Marshal(v)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	err = bkt.Put(idBytes, structBytes)
+	return tx.addErr(err)
+}
+
 // Get fetches v by ID.
 func (tx *Tx) Get(v interface{}, id interface{}) error {
 	ti, _, err := tx.validateStruct(v, get)
