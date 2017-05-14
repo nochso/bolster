@@ -7,6 +7,7 @@ import (
 
 	"github.com/kylelemons/godebug/pretty"
 	"github.com/nochso/bolster"
+	"github.com/nochso/bolster/errlist"
 	"github.com/nochso/bolster/internal"
 )
 
@@ -150,7 +151,7 @@ func TestTx_Insert_withAutoincrement(t *testing.T) {
 		internal.GoldStore(t, st, *updateGold)
 	})
 	// TODO Add tests with more int/uint types
-	t.Run("overflowID", func(t *testing.T) {
+	t.Run("overflowIDinSingleTransaction", func(t *testing.T) {
 		err := st.Write(func(tx *bolster.Tx) error {
 			return tx.Truncate(structWithAutoincrement{})
 		})
@@ -158,11 +159,8 @@ func TestTx_Insert_withAutoincrement(t *testing.T) {
 			t.Error(err)
 		}
 		err = st.Write(func(tx *bolster.Tx) error {
-			for i := 0; i < 256; i++ {
-				err := tx.Insert(&structWithAutoincrement{})
-				if err != nil {
-					return err
-				}
+			for i := 0; i < 257; i++ {
+				tx.Insert(&structWithAutoincrement{})
 			}
 			return nil
 		})
@@ -170,6 +168,27 @@ func TestTx_Insert_withAutoincrement(t *testing.T) {
 			t.Error("expected error, got nil")
 		} else {
 			t.Log(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("overflowIDinMultipleTransactions", func(t *testing.T) {
+		err := st.Write(func(tx *bolster.Tx) error {
+			return tx.Truncate(structWithAutoincrement{})
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		errs := errlist.New()
+		for i := 0; i < 257; i++ {
+			err = st.Write(func(tx *bolster.Tx) error {
+				return tx.Insert(&structWithAutoincrement{})
+			})
+			errs = errs.Append(err)
+		}
+		if errs.ErrorOrNil() == nil {
+			t.Error("expected at least one error, got none")
+		} else {
+			t.Log(errs.Error())
 		}
 		internal.GoldStore(t, st, *updateGold)
 	})
