@@ -81,6 +81,27 @@ func (tx *Tx) Truncate(v interface{}) error {
 	return tx.addErr(err)
 }
 
+// Delete removes the given item.
+//
+// If the item does not exist then nothing is done and a nil error is returned.
+func (tx *Tx) Delete(v interface{}) error {
+	ti, rv, err := tx.validateStruct(v, delete)
+	tx.errf = newErrorFactory(delete, ti)
+	if tx.errs.HasError() {
+		return tx.addErr(ErrBadTransaction)
+	}
+	if err != nil {
+		return tx.addErr(err)
+	}
+	id := rv.Field(ti.IDField)
+	idBytes, err := bytesort.Encode(id.Interface())
+	if err != nil {
+		return tx.addErr(err)
+	}
+	bkt := tx.btx.Bucket(ti.FullName)
+	return tx.addErr(bkt.Delete(idBytes))
+}
+
 // Insert saves a new item.
 func (tx *Tx) Insert(v interface{}) error {
 	ti, rv, err := tx.validateStruct(v, insert)

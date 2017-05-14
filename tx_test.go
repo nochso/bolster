@@ -257,3 +257,41 @@ func TestTx_Get(t *testing.T) {
 		}
 	})
 }
+
+func TestTx_Delete(t *testing.T) {
+	st, closer := internal.OpenTestStore(t)
+	defer closer()
+
+	err := st.Register(structWithID{})
+	if err != nil {
+		t.Error(err)
+	}
+
+	internal.GoldStore(t, st, *updateGold)
+	t.Run("nonExisting", func(t *testing.T) {
+		err := st.Write(func(tx *bolster.Tx) error {
+			return tx.Delete(structWithID{})
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("first", func(t *testing.T) {
+		err := st.Write(func(tx *bolster.Tx) error {
+			tx.Insert(&structWithID{1})
+			tx.Insert(&structWithID{2})
+			return nil
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Delete(&structWithID{1})
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+}
