@@ -183,7 +183,7 @@ func TestTx_Insert_withAutoincrement(t *testing.T) {
 			err = st.Write(func(tx *bolster.Tx) error {
 				return tx.Insert(&structWithAutoincrement{})
 			})
-			errs = errs.Append(err)
+			errs.Append(err)
 		}
 		if errs.ErrorOrNil() == nil {
 			t.Error("expected at least one error, got none")

@@ -55,7 +55,7 @@ func (s *Store) Close() error {
 // Any error that is returned from the function is returned from the View() method.
 func (s *Store) Read(fn func(*Tx) error) error {
 	return s.db.View(func(btx *bolt.Tx) error {
-		tx := &Tx{btx: btx, store: s}
+		tx := &Tx{btx: btx, store: s, errs: errlist.New()}
 		err := fn(tx)
 		if err != nil {
 			return err
@@ -71,7 +71,7 @@ func (s *Store) Read(fn func(*Tx) error) error {
 // returned from the Write() method.
 func (s *Store) Write(fn func(*Tx) error) error {
 	return s.db.Update(func(btx *bolt.Tx) error {
-		tx := &Tx{btx: btx, store: s}
+		tx := &Tx{btx: btx, store: s, errs: errlist.New()}
 		err := fn(tx)
 		if err != nil {
 			return err
@@ -85,7 +85,7 @@ func (s *Store) Write(fn func(*Tx) error) error {
 func (s *Store) Register(v ...interface{}) error {
 	errs := errlist.New()
 	for _, vv := range v {
-		errs = errs.Append(s.register(vv))
+		errs.Append(s.register(vv))
 	}
 	return errs.ErrorOrNil()
 }

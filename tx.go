@@ -14,7 +14,7 @@ import (
 type Tx struct {
 	store *Store
 	btx   *bolt.Tx
-	errs  errlist.Errors
+	errs  *errlist.Errors
 }
 
 type txAction int
@@ -60,30 +60,25 @@ func (tx *Tx) validateStruct(v interface{}, action txAction) (typeInfo, reflect.
 // Truncate deletes all items of v's type.
 func (tx *Tx) Truncate(v interface{}) error {
 	if tx.errs.HasError() {
-		tx.errs = tx.errs.Append(ErrBadTransaction)
-		return ErrBadTransaction
+		return tx.errs.Append(ErrBadTransaction).Last()
 	}
 	ti, _, err := tx.validateStruct(v, delete)
 	if err != nil {
-		tx.errs = tx.errs.Append(err)
-		return err
+		return tx.errs.Append(err).Last()
 	}
-	tx.errs = tx.errs.Append(tx.btx.DeleteBucket(ti.FullName))
+	tx.errs.Append(tx.btx.DeleteBucket(ti.FullName))
 	_, err = tx.btx.CreateBucket(ti.FullName)
-	tx.errs = tx.errs.Append(err)
-	return tx.errs.ErrorOrNil()
+	return tx.errs.Append(err).Last()
 }
 
 // Insert saves a new item.
 func (tx *Tx) Insert(v interface{}) error {
 	if tx.errs.HasError() {
-		tx.errs = tx.errs.Append(ErrBadTransaction)
-		return ErrBadTransaction
+		return tx.errs.Append(ErrBadTransaction).Last()
 	}
 	ti, rv, err := tx.validateStruct(v, insert)
 	if err != nil {
-		tx.errs = tx.errs.Append(err)
-		return err
+		return tx.errs.Append(err).Last()
 	}
 
 	bkt := tx.btx.Bucket(ti.FullName)
@@ -91,30 +86,25 @@ func (tx *Tx) Insert(v interface{}) error {
 	if ti.AutoIncrement {
 		err = tx.autoincrement(id, bkt, ti)
 		if err != nil {
-			tx.errs = tx.errs.Append(err)
-			return err
+			return tx.errs.Append(err).Last()
 		}
 	}
 	idBytes, err := bytesort.Encode(id.Interface())
 	if err != nil {
-		tx.errs = tx.errs.Append(err)
-		return err
+		return tx.errs.Append(err).Last()
 	}
 
 	if bkt.Get(idBytes) != nil {
 		err = fmt.Errorf("Insert: %s: item with ID %q already exists", ti, fmt.Sprintf("%v", id.Interface()))
-		tx.errs = tx.errs.Append(err)
-		return err
+		return tx.errs.Append(err).Last()
 	}
 
 	structBytes, err := tx.store.codec.Marshal(v)
 	if err != nil {
-		tx.errs = tx.errs.Append(err)
-		return err
+		return tx.errs.Append(err).Last()
 	}
 	err = bkt.Put(idBytes, structBytes)
-	tx.errs = tx.errs.Append(err)
-	return err
+	return tx.errs.Append(err).Last()
 }
 
 func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, ti typeInfo) error {
