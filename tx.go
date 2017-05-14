@@ -1,6 +1,7 @@
 package bolster
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -44,6 +45,9 @@ func (a txAction) String() string {
 
 func (tx *Tx) validateStruct(v interface{}, action txAction) (typeInfo, reflect.Value, error) {
 	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return typeInfo{}, rv, errors.New("invalid interface")
+	}
 	rt := rv.Type()
 	if action.needsPointer() && rt.Kind() != reflect.Ptr {
 		return typeInfo{}, rv, fmt.Errorf("expected pointer to struct, got %v", rt.Kind())

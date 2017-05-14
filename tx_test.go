@@ -484,3 +484,23 @@ func TestTx_Upsert_withAutoincrement(t *testing.T) {
 		internal.GoldStore(t, st, *updateGold)
 	})
 }
+
+func TestTx_Write_errors(t *testing.T) {
+	st, closer := internal.OpenTestStore(t)
+	defer closer()
+	err := st.Write(func(tx *bolster.Tx) error {
+		tx.Delete(nil)
+		tx.Delete(nil)
+		tx.Get(nil, nil)
+		tx.Insert(nil)
+		tx.Truncate(nil)
+		tx.Update(nil)
+		tx.Upsert(nil)
+		return nil
+	})
+	if err == nil {
+		t.Error("expected error, got nil")
+	} else {
+		t.Log(err)
+	}
+}
