@@ -1,6 +1,7 @@
 package bolster
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -91,25 +92,29 @@ func (s *Store) Register(v ...interface{}) error {
 }
 
 func (s *Store) register(v interface{}) error {
+	e := newErrorFactory(register)
 	t := reflect.TypeOf(v)
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct {
-		return fmt.Errorf("expected struct, got %v", t.Kind())
+		return e.with(fmt.Errorf("expected struct, got %v", t.Kind()))
 	}
-	if _, exists := s.types[t]; exists {
-		return fmt.Errorf("%v: type is already registered", t)
+	if ti, exists := s.types[t]; exists {
+		e.TypeInfo = ti
+		return e.with(errors.New("type is already registered"))
 	}
 	ti, err := newTypeInfo(t)
+	e.TypeInfo = ti
 	if err != nil {
-		return err
+		return e.with(err)
 	}
 	s.types[ti.Type] = ti
-	return s.Write(func(tx *Tx) error {
-		_, err := tx.btx.CreateBucketIfNotExists(ti.FullName)
+	err = s.Write(func(tx *Tx) error {
+		_, err = tx.btx.CreateBucketIfNotExists(ti.FullName)
 		return err
 	})
+	return e.with(err)
 }
 
 type typeInfo struct {
@@ -137,7 +142,7 @@ func (ti *typeInfo) validateIDField() error {
 	tags := newTagList(ti.Type)
 	idKeys := tags.filter(tagID)
 	if len(idKeys) > 1 {
-		return fmt.Errorf("%v: must not have multiple fields with tag %q", ti, tagID)
+		return fmt.Errorf("must not have multiple fields with tag %q", tagID)
 	} else if len(idKeys) == 1 {
 		ti.IDField = idKeys[0]
 	} else if idField, ok := ti.Type.FieldByName("ID"); ok {
@@ -147,7 +152,7 @@ func (ti *typeInfo) validateIDField() error {
 		ti.AutoIncrement = tags.contains(ti.IDField, tagAutoIncrement)
 		return nil
 	}
-	return fmt.Errorf("%v: unable to find ID field: field has to be named \"ID\" or tagged with `bolster:\"id\"`", ti)
+	return errors.New("unable to find ID field: field has to be named \"ID\" or tagged with `bolster:\"id\"`")
 }
 
 type tagList [][]string
@@ -188,7 +193,7 @@ func (ti *typeInfo) validateBytesort() error {
 	zv := reflect.Zero(f.Type)
 	_, err := bytesort.Encode(zv.Interface())
 	if err != nil {
-		err = fmt.Errorf("%v: ID field %q is not byte encodable: %s", ti, f.Name, err)
+		err = fmt.Errorf("ID field %q is not byte encodable: %s", f.Name, err)
 	}
 	return err
 }

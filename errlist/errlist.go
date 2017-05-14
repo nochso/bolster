@@ -15,17 +15,17 @@ func New(errors ...error) *Errors {
 	return &Errors{errs: errors}
 }
 
-// Append adds a non-nil error to the list and returns the same list for easy chaining.
-func (e *Errors) Append(err error) *Errors {
+// Append adds a non-nil error to the list and returns the error as-is.
+func (e *Errors) Append(err error) error {
 	if err == nil {
-		return e
+		return err
 	}
 	if list, ok := err.(*Errors); ok {
 		e.errs = append(e.errs, list.errs...)
 	} else {
 		e.errs = append(e.errs, err)
 	}
-	return e
+	return err
 }
 
 // Last returns the latest error.

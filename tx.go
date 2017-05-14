@@ -1,7 +1,6 @@
 package bolster
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 
@@ -14,10 +13,13 @@ import (
 type Tx struct {
 	store *Store
 	btx   *bolt.Tx
-	errs  *errlist.Errors
+	errs  *errlist.Errors // list of all errors so far
+	errf  Error           // error factory with context
 }
 
 type txAction int
+
+var txActionNames = [7]string{"insert", "update", "upsert", "get", "delete", "truncate", "register"}
 
 const (
 	insert txAction = iota
@@ -25,17 +27,20 @@ const (
 	upsert
 	get
 	delete
+	truncate
+	register
 )
 
 func (a txAction) needsPointer() bool {
 	return a >= insert && a <= get
 }
 
-var (
-	// ErrNotFound is returned when a specific item could not be found.
-	ErrNotFound       = errors.New("item not found")
-	ErrBadTransaction = errors.New("skipping write-action: transaction has already failed and will be rolled back")
-)
+func (a txAction) String() string {
+	if int(a) >= len(txActionNames) || a < 0 {
+		return "[unknown txAction]"
+	}
+	return txActionNames[a]
+}
 
 func (tx *Tx) validateStruct(v interface{}, action txAction) (typeInfo, reflect.Value, error) {
 	rv := reflect.ValueOf(v)
@@ -57,28 +62,34 @@ func (tx *Tx) validateStruct(v interface{}, action txAction) (typeInfo, reflect.
 	return ti, rv, nil
 }
 
+func (tx *Tx) addErr(err error) error {
+	return tx.errs.Append(tx.errf.with(err))
+}
+
 // Truncate deletes all items of v's type.
 func (tx *Tx) Truncate(v interface{}) error {
+	ti, _, err := tx.validateStruct(v, truncate)
+	tx.errf = newErrorFactory(truncate, ti)
 	if tx.errs.HasError() {
-		return tx.errs.Append(ErrBadTransaction).Last()
+		return tx.addErr(ErrBadTransaction)
 	}
-	ti, _, err := tx.validateStruct(v, delete)
 	if err != nil {
-		return tx.errs.Append(err).Last()
+		return tx.addErr(err)
 	}
-	tx.errs.Append(tx.btx.DeleteBucket(ti.FullName))
+	tx.addErr(tx.btx.DeleteBucket(ti.FullName))
 	_, err = tx.btx.CreateBucket(ti.FullName)
-	return tx.errs.Append(err).Last()
+	return tx.addErr(err)
 }
 
 // Insert saves a new item.
 func (tx *Tx) Insert(v interface{}) error {
-	if tx.errs.HasError() {
-		return tx.errs.Append(ErrBadTransaction).Last()
-	}
 	ti, rv, err := tx.validateStruct(v, insert)
+	tx.errf = newErrorFactory(insert, ti)
+	if tx.errs.HasError() {
+		return tx.addErr(ErrBadTransaction)
+	}
 	if err != nil {
-		return tx.errs.Append(err).Last()
+		return tx.addErr(err)
 	}
 
 	bkt := tx.btx.Bucket(ti.FullName)
@@ -86,25 +97,25 @@ func (tx *Tx) Insert(v interface{}) error {
 	if ti.AutoIncrement {
 		err = tx.autoincrement(id, bkt, ti)
 		if err != nil {
-			return tx.errs.Append(err).Last()
+			return tx.addErr(err)
 		}
 	}
 	idBytes, err := bytesort.Encode(id.Interface())
 	if err != nil {
-		return tx.errs.Append(err).Last()
+		return tx.addErr(err)
 	}
 
 	if bkt.Get(idBytes) != nil {
-		err = fmt.Errorf("Insert: %s: item with ID %q already exists", ti, fmt.Sprintf("%v", id.Interface()))
-		return tx.errs.Append(err).Last()
+		err = fmt.Errorf("item with ID %q already exists", fmt.Sprintf("%v", id.Interface()))
+		return tx.addErr(err)
 	}
 
 	structBytes, err := tx.store.codec.Marshal(v)
 	if err != nil {
-		return tx.errs.Append(err).Last()
+		return tx.addErr(err)
 	}
 	err = bkt.Put(idBytes, structBytes)
-	return tx.errs.Append(err).Last()
+	return tx.addErr(err)
 }
 
 func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, ti typeInfo) error {
@@ -119,7 +130,7 @@ func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, ti typeInfo) err
 	}
 	seqRV := reflect.ValueOf(seq)
 	if !seqRV.Type().ConvertibleTo(idType) {
-		return fmt.Errorf("Insert: %s: unable to convert autoincremented ID of type %s to %s", ti, seqRV.Type(), idType)
+		return fmt.Errorf("unable to convert autoincremented ID of type %s to %s", seqRV.Type(), idType)
 	}
 	var overflows bool
 	if idType.Kind() >= reflect.Int && idType.Kind() <= reflect.Int64 {
@@ -129,7 +140,7 @@ func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, ti typeInfo) err
 		overflows = id.OverflowUint(seq)
 	}
 	if overflows {
-		return fmt.Errorf("Insert: %s: next bucket sequence %d overflows ID field of type %s", ti, seq, idType)
+		return fmt.Errorf("next bucket sequence %d overflows ID field of type %s", seq, idType)
 	}
 	id.Set(seqRV.Convert(idType))
 	return nil
@@ -138,22 +149,23 @@ func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, ti typeInfo) err
 // Get fetches v by ID.
 func (tx *Tx) Get(v interface{}, id interface{}) error {
 	ti, _, err := tx.validateStruct(v, get)
+	tx.errf = newErrorFactory(get, ti)
 	if err != nil {
-		return err
+		return tx.errf.with(err)
 	}
 	actTypeID := reflect.TypeOf(id)
 	expTypeID := ti.Type.Field(ti.IDField).Type
 	if actTypeID != expTypeID {
-		return fmt.Errorf("Get: %s: incompatible type of ID: expected %v, got %v", ti, expTypeID, actTypeID)
+		return tx.errf.with(fmt.Errorf("incompatible type of ID: expected %v, got %v", expTypeID, actTypeID))
 	}
 	idBytes, err := bytesort.Encode(id)
 	if err != nil {
-		return err
+		return tx.errf.with(err)
 	}
 	bkt := tx.btx.Bucket(ti.FullName)
 	b := bkt.Get(idBytes)
 	if b == nil {
-		return ErrNotFound
+		return tx.errf.with(ErrNotFound)
 	}
-	return tx.store.codec.Unmarshal(b, v)
+	return tx.errf.with(tx.store.codec.Unmarshal(b, v))
 }

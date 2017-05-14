@@ -214,8 +214,12 @@ func TestTx_Get(t *testing.T) {
 		err := st.Read(func(tx *bolster.Tx) error {
 			return tx.Get(act, 1)
 		})
-		if err != bolster.ErrNotFound {
-			t.Errorf("expected ErrNotFound, got %v", err)
+		e, ok := err.(bolster.Error)
+		if !ok {
+			t.Errorf("expected Error, got %T", err)
+		}
+		if !e.IsNotFound() {
+			t.Errorf("expected Error.IsNotFound = true, got false")
 		} else {
 			t.Log(err)
 		}
