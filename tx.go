@@ -20,10 +20,11 @@ type Tx struct {
 
 type txAction int
 
-var txActionNames = [7]string{"insert", "update", "upsert", "get", "delete", "truncate", "register"}
+var txActionIndex = [...]uint8{0, 6, 12, 18, 21, 27, 35, 43}
 
 const (
-	insert txAction = iota
+	txActionNames          = "insertupdateupsertgetdeletetruncateregister"
+	insert        txAction = iota
 	update
 	upsert
 	get
@@ -37,10 +38,10 @@ func (a txAction) needsPointer() bool {
 }
 
 func (a txAction) String() string {
-	if int(a) >= len(txActionNames) || a < 0 {
-		return "[unknown txAction]"
+	if a < 0 || a >= txAction(len(txActionIndex)-1) {
+		return fmt.Sprintf("txAction(%d)", a)
 	}
-	return txActionNames[a]
+	return txActionNames[txActionIndex[a]:txActionIndex[a+1]]
 }
 
 func (tx *Tx) validateStruct(v interface{}, action txAction) (structType, reflect.Value, error) {
