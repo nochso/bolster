@@ -118,19 +118,18 @@ func (s *Store) register(v interface{}) error {
 }
 
 type structType struct {
-	FullName      []byte
-	IDField       int
-	AutoIncrement bool
-	Type          reflect.Type
+	FullName []byte
+	ID       idField
+	Type     reflect.Type
 }
 
 func newStructType(t reflect.Type) (structType, error) {
 	st := &structType{
 		FullName: []byte(t.PkgPath() + "." + t.Name()),
 		Type:     t,
-		IDField:  -1,
 	}
-	err := st.validateIDField()
+	var err error
+	st.ID, err = newIDField(t)
 	if err != nil {
 		return *st, err
 	}
@@ -138,21 +137,42 @@ func newStructType(t reflect.Type) (structType, error) {
 	return *st, err
 }
 
-func (st *structType) validateIDField() error {
-	tags := newTagList(st.Type)
+func (st *structType) validateBytesort() error {
+	zv := reflect.Zero(st.ID.Type)
+	_, err := bytesort.Encode(zv.Interface())
+	if err != nil {
+		err = fmt.Errorf("ID field %q is not byte encodable: %s", st.ID.Name, err)
+	}
+	return err
+}
+
+func (st structType) String() string {
+	return string(st.FullName)
+}
+
+type idField struct {
+	StructPos     int
+	AutoIncrement bool
+	reflect.StructField
+}
+
+func newIDField(t reflect.Type) (idField, error) {
+	id := idField{StructPos: -1}
+	tags := newTagList(t)
 	idKeys := tags.filter(tagID)
 	if len(idKeys) > 1 {
-		return fmt.Errorf("must not have multiple fields with tag %q", tagID)
+		return id, fmt.Errorf("must not have multiple fields with tag %q", tagID)
 	} else if len(idKeys) == 1 {
-		st.IDField = idKeys[0]
-	} else if idField, ok := st.Type.FieldByName("ID"); ok {
-		st.IDField = idField.Index[0]
+		id.StructPos = idKeys[0]
+	} else if idField, ok := t.FieldByName("ID"); ok {
+		id.StructPos = idField.Index[0]
 	}
-	if st.IDField != -1 {
-		st.AutoIncrement = tags.contains(st.IDField, tagAutoIncrement)
-		return nil
+	if id.StructPos == -1 {
+		return id, errors.New("unable to find ID field: field has to be named \"ID\" or tagged with `bolster:\"id\"`")
 	}
-	return errors.New("unable to find ID field: field has to be named \"ID\" or tagged with `bolster:\"id\"`")
+	id.StructField = t.Field(id.StructPos)
+	id.AutoIncrement = tags.contains(id.StructPos, tagAutoIncrement)
+	return id, nil
 }
 
 type tagList [][]string
@@ -186,18 +206,4 @@ func (tl tagList) contains(i int, s string) bool {
 		}
 	}
 	return false
-}
-
-func (st *structType) validateBytesort() error {
-	f := st.Type.Field(st.IDField)
-	zv := reflect.Zero(f.Type)
-	_, err := bytesort.Encode(zv.Interface())
-	if err != nil {
-		err = fmt.Errorf("ID field %q is not byte encodable: %s", f.Name, err)
-	}
-	return err
-}
-
-func (st structType) String() string {
-	return string(st.FullName)
 }

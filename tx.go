@@ -97,7 +97,7 @@ func (tx *Tx) Delete(v interface{}) error {
 	if err != nil {
 		return tx.addErr(err)
 	}
-	id := rv.Field(st.IDField)
+	id := rv.Field(st.ID.StructPos)
 	idBytes, err := bytesort.Encode(id.Interface())
 	if err != nil {
 		return tx.addErr(err)
@@ -118,8 +118,8 @@ func (tx *Tx) Insert(v interface{}) error {
 	}
 
 	bkt := tx.btx.Bucket(st.FullName)
-	id := rv.Field(st.IDField)
-	if st.AutoIncrement {
+	id := rv.Field(st.ID.StructPos)
+	if st.ID.AutoIncrement {
 		err = tx.autoincrement(id, bkt, st)
 		if err != nil {
 			return tx.addErr(err)
@@ -184,7 +184,7 @@ func (tx *Tx) Update(v interface{}) error {
 		return tx.addErr(err)
 	}
 	bkt := tx.btx.Bucket(st.FullName)
-	id := rv.Field(st.IDField)
+	id := rv.Field(st.ID.StructPos)
 	idBytes, err := bytesort.Encode(id.Interface())
 	if err != nil {
 		return tx.addErr(err)
@@ -211,14 +211,14 @@ func (tx *Tx) Upsert(v interface{}) error {
 	if err != nil {
 		return tx.addErr(err)
 	}
-	id := rv.Field(st.IDField)
+	id := rv.Field(st.ID.StructPos)
 	idBytes, err := bytesort.Encode(id.Interface())
 	if err != nil {
 		return tx.addErr(err)
 	}
 	bkt := tx.btx.Bucket(st.FullName)
 	// if item does not exist we might have to autoincrement
-	if st.AutoIncrement && bkt.Get(idBytes) == nil {
+	if st.ID.AutoIncrement && bkt.Get(idBytes) == nil {
 		err = tx.autoincrement(id, bkt, st)
 		if err != nil {
 			return tx.addErr(err)
@@ -240,7 +240,7 @@ func (tx *Tx) Get(v interface{}, id interface{}) error {
 		return tx.errf.with(err)
 	}
 	actTypeID := reflect.TypeOf(id)
-	expTypeID := st.Type.Field(st.IDField).Type
+	expTypeID := st.ID.Type
 	if actTypeID != expTypeID {
 		return tx.errf.with(fmt.Errorf("incompatible type of ID: expected %v, got %v", expTypeID, actTypeID))
 	}
