@@ -36,6 +36,10 @@ func (a txAction) needsPointer() bool {
 	return a >= insert && a <= get
 }
 
+func (a txAction) canAutoIncrement() bool {
+	return a == insert || a == upsert
+}
+
 func (a txAction) String() string {
 	if a < 0 || a >= txAction(len(txActionIndex)-1) {
 		return fmt.Sprintf("txAction(%d)", a)
@@ -133,7 +137,7 @@ func (tx *Tx) put(v interface{}, action txAction) error {
 	}
 	bkt := tx.btx.Bucket(st.FullName)
 	id := rv.Field(st.ID.StructPos)
-	if (action == insert || action == upsert) && st.ID.AutoIncrement {
+	if action.canAutoIncrement() && st.ID.AutoIncrement {
 		err = tx.autoincrement(id, bkt, st)
 		if err != nil {
 			return tx.addErr(err)
