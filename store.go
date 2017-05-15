@@ -151,9 +151,9 @@ func (st structType) String() string {
 }
 
 type idField struct {
-	StructPos     int
-	AutoIncrement bool
+	StructPos int
 	reflect.StructField
+	AutoIncrement bool
 }
 
 func (i idField) isInteger() bool {
