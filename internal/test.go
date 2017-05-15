@@ -17,7 +17,7 @@ import (
 	"github.com/nochso/bolster"
 )
 
-var reUnderscore = regexp.MustCompile(`(?m)([A-Z][^/_]+)_`)
+var reUnderscore = regexp.MustCompile(`([A-Z][^/_]+)_`)
 
 // Gold compares actual to a golden file named after t.Name()
 func Gold(t *testing.T, actual []byte, update bool) {
