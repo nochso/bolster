@@ -107,18 +107,33 @@ func (tx *Tx) Delete(v interface{}) error {
 
 // Insert saves a new item.
 func (tx *Tx) Insert(v interface{}) error {
-	st, rv, err := tx.validateStruct(v, insert)
-	tx.errf = newErrorFactory(insert, st)
+	return tx.put(v, insert)
+}
+
+// Update overwrites an existing item.
+//
+// If the item does not exist, an error is returned.
+func (tx *Tx) Update(v interface{}) error {
+	return tx.put(v, update)
+}
+
+// Upsert either updates or inserts an item.
+func (tx *Tx) Upsert(v interface{}) error {
+	return tx.put(v, upsert)
+}
+
+func (tx *Tx) put(v interface{}, action txAction) error {
+	st, rv, err := tx.validateStruct(v, action)
+	tx.errf = newErrorFactory(action, st)
 	if tx.errs.HasError() {
 		return tx.addErr(ErrBadTransaction)
 	}
 	if err != nil {
 		return tx.addErr(err)
 	}
-
 	bkt := tx.btx.Bucket(st.FullName)
 	id := rv.Field(st.ID.StructPos)
-	if st.ID.AutoIncrement {
+	if (action == insert || action == upsert) && st.ID.AutoIncrement {
 		err = tx.autoincrement(id, bkt, st)
 		if err != nil {
 			return tx.addErr(err)
@@ -128,12 +143,13 @@ func (tx *Tx) Insert(v interface{}) error {
 	if err != nil {
 		return tx.addErr(err)
 	}
-
-	if bkt.Get(idBytes) != nil {
+	if action == insert && bkt.Get(idBytes) != nil {
 		err = fmt.Errorf("item with ID %q already exists", fmt.Sprintf("%v", id.Interface()))
 		return tx.addErr(err)
+	} else if action == update && bkt.Get(idBytes) == nil {
+		err = fmt.Errorf("item with ID %q does not exist", fmt.Sprintf("%v", id.Interface()))
+		return tx.addErr(err)
 	}
-
 	structBytes, err := tx.store.codec.Marshal(v)
 	if err != nil {
 		return tx.addErr(err)
@@ -168,67 +184,6 @@ func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, st structType) e
 	}
 	id.Set(seqRV.Convert(idType))
 	return nil
-}
-
-// Update overwrites an existing item.
-//
-// If the item does not exist, an error is returned.
-func (tx *Tx) Update(v interface{}) error {
-	st, rv, err := tx.validateStruct(v, update)
-	tx.errf = newErrorFactory(update, st)
-	if tx.errs.HasError() {
-		return tx.addErr(ErrBadTransaction)
-	}
-	if err != nil {
-		return tx.addErr(err)
-	}
-	bkt := tx.btx.Bucket(st.FullName)
-	id := rv.Field(st.ID.StructPos)
-	idBytes, err := st.ID.encodeStruct(rv)
-	if err != nil {
-		return tx.addErr(err)
-	}
-	if bkt.Get(idBytes) == nil {
-		err = fmt.Errorf("item with ID %q does not exist", fmt.Sprintf("%v", id.Interface()))
-		return tx.addErr(err)
-	}
-	structBytes, err := tx.store.codec.Marshal(v)
-	if err != nil {
-		return tx.addErr(err)
-	}
-	err = bkt.Put(idBytes, structBytes)
-	return tx.addErr(err)
-}
-
-// Upsert either updates or inserts an item.
-func (tx *Tx) Upsert(v interface{}) error {
-	st, rv, err := tx.validateStruct(v, upsert)
-	tx.errf = newErrorFactory(upsert, st)
-	if tx.errs.HasError() {
-		return tx.addErr(ErrBadTransaction)
-	}
-	if err != nil {
-		return tx.addErr(err)
-	}
-	id := rv.Field(st.ID.StructPos)
-	bkt := tx.btx.Bucket(st.FullName)
-	// if item does not exist we might have to autoincrement
-	if st.ID.AutoIncrement {
-		err = tx.autoincrement(id, bkt, st)
-		if err != nil {
-			return tx.addErr(err)
-		}
-	}
-	idBytes, err := st.ID.encodeStruct(rv)
-	if err != nil {
-		return tx.addErr(err)
-	}
-	structBytes, err := tx.store.codec.Marshal(v)
-	if err != nil {
-		return tx.addErr(err)
-	}
-	err = bkt.Put(idBytes, structBytes)
-	return tx.addErr(err)
 }
 
 // Get fetches v by ID.
