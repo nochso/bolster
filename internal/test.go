@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -16,9 +17,13 @@ import (
 	"github.com/nochso/bolster"
 )
 
+var reUnderscore = regexp.MustCompile(`(?m)([A-Z][^/_]+)_`)
+
 // Gold compares actual to a golden file named after t.Name()
 func Gold(t *testing.T, actual []byte, update bool) {
-	name := strings.TrimPrefix(t.Name(), "Test") + ".golden"
+	name := strings.TrimPrefix(t.Name(), "Test")
+	name = reUnderscore.ReplaceAllString(name, `$1/`)
+	name += ".golden"
 	path := filepath.Join("test-fixtures", name)
 	err := os.MkdirAll(filepath.Dir(path), 0755)
 	if err != nil {
