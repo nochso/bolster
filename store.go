@@ -160,6 +160,24 @@ func (i idField) isInteger() bool {
 	return i.Type.Kind() >= reflect.Int && i.Type.Kind() <= reflect.Uint64
 }
 
+func (i idField) encode(v interface{}) ([]byte, error) {
+	f := reflect.ValueOf(v)
+	// always encode integer IDs with 8 bytes length
+	if i.isInteger() && f.Type().Size() < 8 {
+		k := f.Type().Kind()
+		if k >= reflect.Int && k <= reflect.Int64 {
+			f = f.Convert(reflect.TypeOf(int64(0)))
+		} else {
+			f = f.Convert(reflect.TypeOf(uint64(0)))
+		}
+	}
+	return bytesort.Encode(f.Interface())
+}
+
+func (i idField) encodeStruct(structRV reflect.Value) ([]byte, error) {
+	return i.encode(structRV.Field(i.StructPos).Interface())
+}
+
 func newIDField(t reflect.Type) (idField, error) {
 	id := idField{StructPos: -1}
 	tags := newTagList(t)

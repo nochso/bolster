@@ -6,7 +6,6 @@ import (
 	"reflect"
 
 	"github.com/boltdb/bolt"
-	"github.com/nochso/bolster/bytesort"
 	"github.com/nochso/bolster/errlist"
 )
 
@@ -98,10 +97,9 @@ func (tx *Tx) Delete(v interface{}) error {
 	if err != nil {
 		return tx.addErr(err)
 	}
-	id := rv.Field(st.ID.StructPos)
-	idBytes, err := bytesort.Encode(id.Interface())
+	idBytes, err := st.ID.encodeStruct(rv)
 	if err != nil {
-		return tx.addErr(err)
+		tx.addErr(err)
 	}
 	bkt := tx.btx.Bucket(st.FullName)
 	return tx.addErr(bkt.Delete(idBytes))
@@ -126,7 +124,7 @@ func (tx *Tx) Insert(v interface{}) error {
 			return tx.addErr(err)
 		}
 	}
-	idBytes, err := bytesort.Encode(id.Interface())
+	idBytes, err := st.ID.encodeStruct(rv)
 	if err != nil {
 		return tx.addErr(err)
 	}
@@ -186,7 +184,7 @@ func (tx *Tx) Update(v interface{}) error {
 	}
 	bkt := tx.btx.Bucket(st.FullName)
 	id := rv.Field(st.ID.StructPos)
-	idBytes, err := bytesort.Encode(id.Interface())
+	idBytes, err := st.ID.encodeStruct(rv)
 	if err != nil {
 		return tx.addErr(err)
 	}
@@ -213,17 +211,17 @@ func (tx *Tx) Upsert(v interface{}) error {
 		return tx.addErr(err)
 	}
 	id := rv.Field(st.ID.StructPos)
-	idBytes, err := bytesort.Encode(id.Interface())
-	if err != nil {
-		return tx.addErr(err)
-	}
 	bkt := tx.btx.Bucket(st.FullName)
 	// if item does not exist we might have to autoincrement
-	if st.ID.AutoIncrement && bkt.Get(idBytes) == nil {
+	if st.ID.AutoIncrement {
 		err = tx.autoincrement(id, bkt, st)
 		if err != nil {
 			return tx.addErr(err)
 		}
+	}
+	idBytes, err := st.ID.encodeStruct(rv)
+	if err != nil {
+		return tx.addErr(err)
 	}
 	structBytes, err := tx.store.codec.Marshal(v)
 	if err != nil {
@@ -245,7 +243,7 @@ func (tx *Tx) Get(v interface{}, id interface{}) error {
 	if actTypeID != expTypeID {
 		return tx.errf.with(fmt.Errorf("incompatible type of ID: expected %v, got %v", expTypeID, actTypeID))
 	}
-	idBytes, err := bytesort.Encode(id)
+	idBytes, err := st.ID.encode(id)
 	if err != nil {
 		return tx.errf.with(err)
 	}
