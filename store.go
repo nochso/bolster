@@ -156,6 +156,10 @@ type idField struct {
 	reflect.StructField
 }
 
+func (i idField) isInteger() bool {
+	return i.Type.Kind() >= reflect.Int && i.Type.Kind() <= reflect.Uint64
+}
+
 func newIDField(t reflect.Type) (idField, error) {
 	id := idField{StructPos: -1}
 	tags := newTagList(t)
@@ -172,6 +176,9 @@ func newIDField(t reflect.Type) (idField, error) {
 	}
 	id.StructField = t.Field(id.StructPos)
 	id.AutoIncrement = tags.contains(id.StructPos, tagAutoIncrement)
+	if !id.isInteger() && id.AutoIncrement {
+		return id, fmt.Errorf("autoincremented IDs must be integer, got %s", id.Type.Kind())
+	}
 	return id, nil
 }
 
