@@ -14,9 +14,9 @@ var (
 
 // Error combines error with context information.
 type Error struct {
-	Action   txAction
-	TypeInfo typeInfo
-	Err      error
+	Action     txAction
+	structType structType
+	Err        error
 }
 
 // IsNotFound returns true if the inner error is ErrNotFound.
@@ -29,10 +29,10 @@ func (e Error) IsBadTransaction() bool {
 	return e.Err == ErrBadTransaction
 }
 
-func newErrorFactory(a txAction, ti ...typeInfo) Error {
+func newErrorFactory(a txAction, st ...structType) Error {
 	e := Error{Action: a}
-	if len(ti) > 0 {
-		e.TypeInfo = ti[0]
+	if len(st) > 0 {
+		e.structType = st[0]
 	}
 	return e
 }
@@ -49,8 +49,8 @@ func (e Error) with(err error) error {
 //
 // It combines the action, type info and inner error.
 func (e Error) Error() string {
-	if e.TypeInfo.FullName == nil {
+	if e.structType.FullName == nil {
 		return fmt.Sprintf("%s: %s", e.Action, e.Err)
 	}
-	return fmt.Sprintf("%s: %s: %s", e.Action, e.TypeInfo, e.Err)
+	return fmt.Sprintf("%s: %s: %s", e.Action, e.structType, e.Err)
 }

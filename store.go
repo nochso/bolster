@@ -24,7 +24,7 @@ const (
 type Store struct {
 	codec codec.Interface
 	db    *bolt.DB
-	types map[reflect.Type]typeInfo
+	types map[reflect.Type]structType
 }
 
 // Open creates and opens a Store.
@@ -36,7 +36,7 @@ func Open(path string, mode os.FileMode, options *bolt.Options) (*Store, error) 
 	st := &Store{
 		codec: json.Codec,
 		db:    db,
-		types: make(map[reflect.Type]typeInfo),
+		types: make(map[reflect.Type]structType),
 	}
 	return st, nil
 }
@@ -100,56 +100,56 @@ func (s *Store) register(v interface{}) error {
 	if t.Kind() != reflect.Struct {
 		return e.with(fmt.Errorf("expected struct, got %v", t.Kind()))
 	}
-	if ti, exists := s.types[t]; exists {
-		e.TypeInfo = ti
+	if st, exists := s.types[t]; exists {
+		e.structType = st
 		return e.with(errors.New("type is already registered"))
 	}
-	ti, err := newTypeInfo(t)
-	e.TypeInfo = ti
+	st, err := newStructType(t)
+	e.structType = st
 	if err != nil {
 		return e.with(err)
 	}
-	s.types[ti.Type] = ti
+	s.types[st.Type] = st
 	err = s.Write(func(tx *Tx) error {
-		_, err = tx.btx.CreateBucketIfNotExists(ti.FullName)
+		_, err = tx.btx.CreateBucketIfNotExists(st.FullName)
 		return err
 	})
 	return e.with(err)
 }
 
-type typeInfo struct {
+type structType struct {
 	FullName      []byte
 	IDField       int
 	AutoIncrement bool
 	Type          reflect.Type
 }
 
-func newTypeInfo(t reflect.Type) (typeInfo, error) {
-	ti := &typeInfo{
+func newStructType(t reflect.Type) (structType, error) {
+	st := &structType{
 		FullName: []byte(t.PkgPath() + "." + t.Name()),
 		Type:     t,
 		IDField:  -1,
 	}
-	err := ti.validateIDField()
+	err := st.validateIDField()
 	if err != nil {
-		return *ti, err
+		return *st, err
 	}
-	err = ti.validateBytesort()
-	return *ti, err
+	err = st.validateBytesort()
+	return *st, err
 }
 
-func (ti *typeInfo) validateIDField() error {
-	tags := newTagList(ti.Type)
+func (st *structType) validateIDField() error {
+	tags := newTagList(st.Type)
 	idKeys := tags.filter(tagID)
 	if len(idKeys) > 1 {
 		return fmt.Errorf("must not have multiple fields with tag %q", tagID)
 	} else if len(idKeys) == 1 {
-		ti.IDField = idKeys[0]
-	} else if idField, ok := ti.Type.FieldByName("ID"); ok {
-		ti.IDField = idField.Index[0]
+		st.IDField = idKeys[0]
+	} else if idField, ok := st.Type.FieldByName("ID"); ok {
+		st.IDField = idField.Index[0]
 	}
-	if ti.IDField != -1 {
-		ti.AutoIncrement = tags.contains(ti.IDField, tagAutoIncrement)
+	if st.IDField != -1 {
+		st.AutoIncrement = tags.contains(st.IDField, tagAutoIncrement)
 		return nil
 	}
 	return errors.New("unable to find ID field: field has to be named \"ID\" or tagged with `bolster:\"id\"`")
@@ -188,8 +188,8 @@ func (tl tagList) contains(i int, s string) bool {
 	return false
 }
 
-func (ti *typeInfo) validateBytesort() error {
-	f := ti.Type.Field(ti.IDField)
+func (st *structType) validateBytesort() error {
+	f := st.Type.Field(st.IDField)
 	zv := reflect.Zero(f.Type)
 	_, err := bytesort.Encode(zv.Interface())
 	if err != nil {
@@ -198,6 +198,6 @@ func (ti *typeInfo) validateBytesort() error {
 	return err
 }
 
-func (ti typeInfo) String() string {
-	return string(ti.FullName)
+func (st structType) String() string {
+	return string(st.FullName)
 }

@@ -43,27 +43,27 @@ func (a txAction) String() string {
 	return txActionNames[a]
 }
 
-func (tx *Tx) validateStruct(v interface{}, action txAction) (typeInfo, reflect.Value, error) {
+func (tx *Tx) validateStruct(v interface{}, action txAction) (structType, reflect.Value, error) {
 	rv := reflect.ValueOf(v)
 	if !rv.IsValid() {
-		return typeInfo{}, rv, errors.New("invalid interface")
+		return structType{}, rv, errors.New("invalid interface")
 	}
 	rt := rv.Type()
 	if action.needsPointer() && rt.Kind() != reflect.Ptr {
-		return typeInfo{}, rv, fmt.Errorf("expected pointer to struct, got %v", rt.Kind())
+		return structType{}, rv, fmt.Errorf("expected pointer to struct, got %v", rt.Kind())
 	}
 	if rt.Kind() == reflect.Ptr {
 		rv = rv.Elem()
 		rt = rv.Type()
 	}
 	if rt.Kind() != reflect.Struct {
-		return typeInfo{}, rv, fmt.Errorf("expected struct, got %v", rt.Kind())
+		return structType{}, rv, fmt.Errorf("expected struct, got %v", rt.Kind())
 	}
-	ti, ok := tx.store.types[rt]
+	st, ok := tx.store.types[rt]
 	if !ok {
-		return ti, rv, fmt.Errorf("unregistered struct: %v", rt)
+		return st, rv, fmt.Errorf("unregistered struct: %v", rt)
 	}
-	return ti, rv, nil
+	return st, rv, nil
 }
 
 func (tx *Tx) addErr(err error) error {
@@ -72,16 +72,16 @@ func (tx *Tx) addErr(err error) error {
 
 // Truncate deletes all items of v's type.
 func (tx *Tx) Truncate(v interface{}) error {
-	ti, _, err := tx.validateStruct(v, truncate)
-	tx.errf = newErrorFactory(truncate, ti)
+	st, _, err := tx.validateStruct(v, truncate)
+	tx.errf = newErrorFactory(truncate, st)
 	if tx.errs.HasError() {
 		return tx.addErr(ErrBadTransaction)
 	}
 	if err != nil {
 		return tx.addErr(err)
 	}
-	tx.addErr(tx.btx.DeleteBucket(ti.FullName))
-	_, err = tx.btx.CreateBucket(ti.FullName)
+	tx.addErr(tx.btx.DeleteBucket(st.FullName))
+	_, err = tx.btx.CreateBucket(st.FullName)
 	return tx.addErr(err)
 }
 
@@ -89,27 +89,27 @@ func (tx *Tx) Truncate(v interface{}) error {
 //
 // If the item does not exist then nothing is done and a nil error is returned.
 func (tx *Tx) Delete(v interface{}) error {
-	ti, rv, err := tx.validateStruct(v, delete)
-	tx.errf = newErrorFactory(delete, ti)
+	st, rv, err := tx.validateStruct(v, delete)
+	tx.errf = newErrorFactory(delete, st)
 	if tx.errs.HasError() {
 		return tx.addErr(ErrBadTransaction)
 	}
 	if err != nil {
 		return tx.addErr(err)
 	}
-	id := rv.Field(ti.IDField)
+	id := rv.Field(st.IDField)
 	idBytes, err := bytesort.Encode(id.Interface())
 	if err != nil {
 		return tx.addErr(err)
 	}
-	bkt := tx.btx.Bucket(ti.FullName)
+	bkt := tx.btx.Bucket(st.FullName)
 	return tx.addErr(bkt.Delete(idBytes))
 }
 
 // Insert saves a new item.
 func (tx *Tx) Insert(v interface{}) error {
-	ti, rv, err := tx.validateStruct(v, insert)
-	tx.errf = newErrorFactory(insert, ti)
+	st, rv, err := tx.validateStruct(v, insert)
+	tx.errf = newErrorFactory(insert, st)
 	if tx.errs.HasError() {
 		return tx.addErr(ErrBadTransaction)
 	}
@@ -117,10 +117,10 @@ func (tx *Tx) Insert(v interface{}) error {
 		return tx.addErr(err)
 	}
 
-	bkt := tx.btx.Bucket(ti.FullName)
-	id := rv.Field(ti.IDField)
-	if ti.AutoIncrement {
-		err = tx.autoincrement(id, bkt, ti)
+	bkt := tx.btx.Bucket(st.FullName)
+	id := rv.Field(st.IDField)
+	if st.AutoIncrement {
+		err = tx.autoincrement(id, bkt, st)
 		if err != nil {
 			return tx.addErr(err)
 		}
@@ -143,7 +143,7 @@ func (tx *Tx) Insert(v interface{}) error {
 	return tx.addErr(err)
 }
 
-func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, ti typeInfo) error {
+func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, st structType) error {
 	idType := id.Type()
 	zero := reflect.Zero(idType).Interface()
 	if id.Interface() != zero {
@@ -175,16 +175,16 @@ func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, ti typeInfo) err
 //
 // If the item does not exist, an error is returned.
 func (tx *Tx) Update(v interface{}) error {
-	ti, rv, err := tx.validateStruct(v, update)
-	tx.errf = newErrorFactory(update, ti)
+	st, rv, err := tx.validateStruct(v, update)
+	tx.errf = newErrorFactory(update, st)
 	if tx.errs.HasError() {
 		return tx.addErr(ErrBadTransaction)
 	}
 	if err != nil {
 		return tx.addErr(err)
 	}
-	bkt := tx.btx.Bucket(ti.FullName)
-	id := rv.Field(ti.IDField)
+	bkt := tx.btx.Bucket(st.FullName)
+	id := rv.Field(st.IDField)
 	idBytes, err := bytesort.Encode(id.Interface())
 	if err != nil {
 		return tx.addErr(err)
@@ -203,23 +203,23 @@ func (tx *Tx) Update(v interface{}) error {
 
 // Upsert either updates or inserts an item.
 func (tx *Tx) Upsert(v interface{}) error {
-	ti, rv, err := tx.validateStruct(v, upsert)
-	tx.errf = newErrorFactory(upsert, ti)
+	st, rv, err := tx.validateStruct(v, upsert)
+	tx.errf = newErrorFactory(upsert, st)
 	if tx.errs.HasError() {
 		return tx.addErr(ErrBadTransaction)
 	}
 	if err != nil {
 		return tx.addErr(err)
 	}
-	id := rv.Field(ti.IDField)
+	id := rv.Field(st.IDField)
 	idBytes, err := bytesort.Encode(id.Interface())
 	if err != nil {
 		return tx.addErr(err)
 	}
-	bkt := tx.btx.Bucket(ti.FullName)
+	bkt := tx.btx.Bucket(st.FullName)
 	// if item does not exist we might have to autoincrement
-	if ti.AutoIncrement && bkt.Get(idBytes) == nil {
-		err = tx.autoincrement(id, bkt, ti)
+	if st.AutoIncrement && bkt.Get(idBytes) == nil {
+		err = tx.autoincrement(id, bkt, st)
 		if err != nil {
 			return tx.addErr(err)
 		}
@@ -234,13 +234,13 @@ func (tx *Tx) Upsert(v interface{}) error {
 
 // Get fetches v by ID.
 func (tx *Tx) Get(v interface{}, id interface{}) error {
-	ti, _, err := tx.validateStruct(v, get)
-	tx.errf = newErrorFactory(get, ti)
+	st, _, err := tx.validateStruct(v, get)
+	tx.errf = newErrorFactory(get, st)
 	if err != nil {
 		return tx.errf.with(err)
 	}
 	actTypeID := reflect.TypeOf(id)
-	expTypeID := ti.Type.Field(ti.IDField).Type
+	expTypeID := st.Type.Field(st.IDField).Type
 	if actTypeID != expTypeID {
 		return tx.errf.with(fmt.Errorf("incompatible type of ID: expected %v, got %v", expTypeID, actTypeID))
 	}
@@ -248,7 +248,7 @@ func (tx *Tx) Get(v interface{}, id interface{}) error {
 	if err != nil {
 		return tx.errf.with(err)
 	}
-	bkt := tx.btx.Bucket(ti.FullName)
+	bkt := tx.btx.Bucket(st.FullName)
 	b := bkt.Get(idBytes)
 	if b == nil {
 		return tx.errf.with(ErrNotFound)
