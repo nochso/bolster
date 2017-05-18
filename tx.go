@@ -22,14 +22,14 @@ type txAction int
 var txActionIndex = [...]uint8{0, 6, 12, 18, 21, 27, 35, 43}
 
 const (
-	txActionNames          = "insertupdateupsertgetdeletetruncateregister"
-	insert        txAction = iota
+	insert txAction = iota
 	update
 	upsert
 	get
 	delete
 	truncate
 	register
+	txActionNames = "insertupdateupsertgetdeletetruncateregister"
 )
 
 func (a txAction) needsPointer() bool {
