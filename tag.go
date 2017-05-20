@@ -11,10 +11,10 @@ const (
 	tagAutoIncrement = "inc"
 )
 
-type tagList [][]string
+type structTagList [][]string
 
-// newTagList returns a list of bolster tags for each struct field.
-func newTagList(rt reflect.Type) tagList {
+// newStructTagList returns a list of bolster tags for each struct field.
+func newStructTagList(rt reflect.Type) structTagList {
 	tl := make([][]string, 0, rt.NumField())
 	for i := 0; i < rt.NumField(); i++ {
 		ftags := strings.Split(rt.Field(i).Tag.Get(tagBolster), ",")
@@ -24,10 +24,10 @@ func newTagList(rt reflect.Type) tagList {
 }
 
 // filter returns the positions of fields containing a tag s.
-func (tl tagList) filter(s string) []int {
+func (stl structTagList) filter(s string) []int {
 	keys := []int{}
-	for i := range tl {
-		if tl.contains(i, s) {
+	for i := range stl {
+		if stl.contains(i, s) {
 			keys = append(keys, i)
 		}
 	}
@@ -35,8 +35,8 @@ func (tl tagList) filter(s string) []int {
 }
 
 // contains returns true when i'th field contains tag s.
-func (tl tagList) contains(i int, s string) bool {
-	for _, w := range tl[i] {
+func (stl structTagList) contains(i int, s string) bool {
+	for _, w := range stl[i] {
 		if w == s {
 			return true
 		}

@@ -71,8 +71,8 @@ func (i idField) encodeStruct(structRV reflect.Value) ([]byte, error) {
 
 func newIDField(t reflect.Type) (idField, error) {
 	id := idField{StructPos: -1}
-	tags := newTagList(t)
-	idKeys := tags.filter(tagID)
+	stl := newStructTagList(t)
+	idKeys := stl.filter(tagID)
 	if len(idKeys) > 1 {
 		return id, fmt.Errorf("must not have multiple fields with tag %q", tagID)
 	} else if len(idKeys) == 1 {
@@ -84,7 +84,7 @@ func newIDField(t reflect.Type) (idField, error) {
 		return id, errors.New("unable to find ID field: field has to be named \"ID\" or tagged with `bolster:\"id\"`")
 	}
 	id.StructField = t.Field(id.StructPos)
-	id.AutoIncrement = tags.contains(id.StructPos, tagAutoIncrement)
+	id.AutoIncrement = stl.contains(id.StructPos, tagAutoIncrement)
 	if !id.isInteger() && id.AutoIncrement {
 		return id, fmt.Errorf("autoincremented IDs must be integer, got %s", id.Type.Kind())
 	}
