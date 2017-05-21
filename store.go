@@ -12,6 +12,10 @@ import (
 	"github.com/nochso/bolster/errlist"
 )
 
+var (
+	bktNameData = []byte("data")
+)
+
 // Store can store and retrieve structs.
 type Store struct {
 	codec codec.Interface
@@ -103,7 +107,11 @@ func (s *Store) register(v interface{}) error {
 	}
 	s.types[st.Type] = st
 	err = s.Write(func(tx *Tx) error {
-		_, err = tx.btx.CreateBucketIfNotExists(st.FullName)
+		bkt, err := tx.btx.CreateBucketIfNotExists(st.FullName)
+		if err != nil {
+			return err
+		}
+		_, err = bkt.CreateBucketIfNotExists(bktNameData)
 		return err
 	})
 	return e.with(err)

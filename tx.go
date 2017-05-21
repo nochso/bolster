@@ -85,7 +85,11 @@ func (tx *Tx) Truncate(v interface{}) error {
 		return tx.addErr(err)
 	}
 	tx.addErr(tx.btx.DeleteBucket(st.FullName))
-	_, err = tx.btx.CreateBucket(st.FullName)
+	bkt, err := tx.btx.CreateBucket(st.FullName)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	_, err = bkt.CreateBucket(bktNameData)
 	return tx.addErr(err)
 }
 
@@ -105,7 +109,7 @@ func (tx *Tx) Delete(v interface{}) error {
 	if err != nil {
 		tx.addErr(err)
 	}
-	bkt := tx.btx.Bucket(st.FullName)
+	bkt := tx.btx.Bucket(st.FullName).Bucket(bktNameData)
 	return tx.addErr(bkt.Delete(idBytes))
 }
 
@@ -135,7 +139,7 @@ func (tx *Tx) put(v interface{}, action txAction) error {
 	if err != nil {
 		return tx.addErr(err)
 	}
-	bkt := tx.btx.Bucket(st.FullName)
+	bkt := tx.btx.Bucket(st.FullName).Bucket(bktNameData)
 	id := rv.Field(st.ID.StructPos)
 	if action.canAutoIncrement() && st.ID.AutoIncrement {
 		err = tx.autoincrement(id, bkt, st)
@@ -206,7 +210,7 @@ func (tx *Tx) Get(v interface{}, id interface{}) error {
 	if err != nil {
 		return tx.errf.with(err)
 	}
-	bkt := tx.btx.Bucket(st.FullName)
+	bkt := tx.btx.Bucket(st.FullName).Bucket(bktNameData)
 	b := bkt.Get(idBytes)
 	if b == nil {
 		return tx.errf.with(ErrNotFound)
