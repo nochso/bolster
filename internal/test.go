@@ -39,7 +39,7 @@ func Gold(t *testing.T, actual []byte, update bool) {
 	}
 	exp, err := ioutil.ReadFile(path)
 	if err != nil {
-		t.Log(err)
+		t.Error(err)
 	}
 	if !bytes.Equal(exp, actual) {
 		t.Error("-Actual +Expected\n" + diff.Diff(string(actual), string(exp)))
