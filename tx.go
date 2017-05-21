@@ -85,12 +85,7 @@ func (tx *Tx) Truncate(v interface{}) error {
 		return tx.addErr(err)
 	}
 	tx.addErr(tx.btx.DeleteBucket(st.FullName))
-	bkt, err := tx.btx.CreateBucket(st.FullName)
-	if err != nil {
-		return tx.addErr(err)
-	}
-	_, err = bkt.CreateBucket(bktNameData)
-	return tx.addErr(err)
+	return tx.addErr(st.init(tx))
 }
 
 // Delete removes the given item.
@@ -110,6 +105,7 @@ func (tx *Tx) Delete(v interface{}) error {
 		tx.addErr(err)
 	}
 	bkt := tx.btx.Bucket(st.FullName).Bucket(bktNameData)
+	// TODO Clean up indexes
 	return tx.addErr(bkt.Delete(idBytes))
 }
 
@@ -163,6 +159,10 @@ func (tx *Tx) put(v interface{}, action txAction) error {
 		return tx.addErr(err)
 	}
 	err = bkt.Put(idBytes, structBytes)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	err = st.putIndexes(tx.btx.Bucket(st.FullName).Bucket(bktNameIndex), rv, idBytes)
 	return tx.addErr(err)
 }
 

@@ -9,6 +9,7 @@ const (
 	tagBolster       = "bolster"
 	tagID            = "id"
 	tagAutoIncrement = "inc"
+	tagIndex         = "index"
 )
 
 type structTagList [][]string

@@ -13,7 +13,8 @@ import (
 )
 
 var (
-	bktNameData = []byte("data")
+	bktNameData  = []byte("data")
+	bktNameIndex = []byte("index")
 )
 
 // Store can store and retrieve structs.
@@ -106,13 +107,5 @@ func (s *Store) register(v interface{}) error {
 		return e.with(err)
 	}
 	s.types[st.Type] = st
-	err = s.Write(func(tx *Tx) error {
-		bkt, err := tx.btx.CreateBucketIfNotExists(st.FullName)
-		if err != nil {
-			return err
-		}
-		_, err = bkt.CreateBucketIfNotExists(bktNameData)
-		return err
-	})
-	return e.with(err)
+	return e.with(s.Write(st.init))
 }
