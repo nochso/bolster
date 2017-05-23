@@ -103,6 +103,30 @@ func TestTx_Insert_withoutAutoincrement(t *testing.T) {
 		}
 		internal.GoldStore(t, st, *updateGold)
 	})
+	t.Run("multiFieldIndex", func(t *testing.T) {
+		st, closer := internal.OpenTestStore(t)
+		defer closer()
+		err := st.Register(structWithMultiFieldIndex{})
+		if err != nil {
+			t.Error(err)
+		}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Truncate(structWithMultiFieldIndex{})
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		err = st.Write(func(tx *bolster.Tx) error {
+			tx.Insert(&structWithMultiFieldIndex{ID: 1, Name: "foo", Visible: true})
+			tx.Insert(&structWithMultiFieldIndex{ID: 2, Name: "bar", Visible: false})
+			tx.Insert(&structWithMultiFieldIndex{ID: 3, Name: "foobar", Visible: false})
+			return nil
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
 }
 
 type structWithAutoincrement struct {
@@ -300,6 +324,31 @@ func TestTx_Delete(t *testing.T) {
 			tx.Insert(&structWithID{3})
 			tx.Insert(&structWithID{4})
 			return tx.Delete(&structWithID{3})
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("multiFieldIndex", func(t *testing.T) {
+		st, closer := internal.OpenTestStore(t)
+		defer closer()
+		err := st.Register(structWithMultiFieldIndex{})
+		if err != nil {
+			t.Error(err)
+		}
+		err = st.Write(func(tx *bolster.Tx) error {
+			tx.Insert(&structWithMultiFieldIndex{ID: 1, Name: "foo", Visible: true})
+			tx.Insert(&structWithMultiFieldIndex{ID: 2, Name: "bar", Visible: false})
+			tx.Insert(&structWithMultiFieldIndex{ID: 3, Name: "foobar", Visible: false})
+			return nil
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		// Expect proper clean up of the index even though we only pass the ID.
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Delete(structWithMultiFieldIndex{ID: 2})
 		})
 		if err != nil {
 			t.Error(err)

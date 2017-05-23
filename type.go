@@ -82,6 +82,16 @@ func (st structType) putIndexes(bkt *bolt.Bucket, rv reflect.Value, id []byte) e
 	return nil
 }
 
+func (st structType) deleteIndexes(bkt *bolt.Bucket, rv reflect.Value, id []byte) error {
+	for _, idx := range st.Indexes {
+		err := idx.delete(bkt, rv, id)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type idField struct {
 	StructPos int
 	reflect.StructField
@@ -221,6 +231,33 @@ func (i index) put(bkt *bolt.Bucket, rv reflect.Value, id []byte) error {
 	}
 	key.Write(id)
 	return bkt.Put(key.Bytes(), nil)
+}
+
+func (i index) delete(bkt *bolt.Bucket, rv reflect.Value, id []byte) error {
+	bkt = bkt.Bucket(i.FullName)
+	key := &bytes.Buffer{}
+	for n, field := range i.Fields {
+		b, err := bytesort.Encode(rv.Field(field.StructPos).Interface())
+		if err != nil {
+			return err
+		}
+		key.Write(b)
+		if field.Type.Kind() == reflect.String && n < len(i.Fields)-1 {
+			bkt = bkt.Bucket(key.Bytes())
+			if bkt == nil {
+				// odd, the index is out of sync. still fulfills the delete though.
+				return nil
+			}
+			key.Reset()
+		}
+	}
+	// TODO Delete empty buckets
+	if i.Unique {
+		// Key -> value (value being the primary ID)
+		return bkt.Delete(key.Bytes())
+	}
+	key.Write(id)
+	return bkt.Delete(key.Bytes())
 }
 
 type indexField struct {

@@ -31,10 +31,26 @@ type structWithInvalidTaggedID struct {
 	Name []string `bolster:"id"`
 }
 
+type structWithSingleFieldIndex struct {
+	ID   int
+	Name string `bolster:"index"`
+}
+
+type structWithMultiFieldIndex struct {
+	ID      int
+	Name    string `bolster:"index NaVi 1"`
+	Visible bool   `bolster:"index NaVi 0"`
+}
+
+type structWithMultiFieldIndexAndWrongOrder struct {
+	ID      int
+	Name    string `bolster:"index NaVi 1"`
+	Visible bool   `bolster:"index NaVi 2"`
+}
+
 func TestStore_Register(t *testing.T) {
 	st, closer := internal.OpenTestStore(t)
 	defer closer()
-
 	t.Run("structWithoutID", func(t *testing.T) {
 		err := st.Register(structWithoutID{})
 		if err == nil {
@@ -104,5 +120,35 @@ func TestStore_Register(t *testing.T) {
 		} else {
 			t.Log(err)
 		}
+	})
+	t.Run("structWithSingleFieldIndex", func(t *testing.T) {
+		st, closer := internal.OpenTestStore(t)
+		defer closer()
+		err := st.Register(structWithSingleFieldIndex{})
+		if err != nil {
+			t.Error(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("structWithMultiFieldIndex", func(t *testing.T) {
+		st, closer := internal.OpenTestStore(t)
+		defer closer()
+		err := st.Register(structWithMultiFieldIndex{})
+		if err != nil {
+			t.Error(err)
+		}
+
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("structWithMultiFieldIndexAndWrongOrder", func(t *testing.T) {
+		st, closer := internal.OpenTestStore(t)
+		defer closer()
+		err := st.Register(structWithMultiFieldIndexAndWrongOrder{})
+		if err == nil {
+			t.Errorf("expected error, got %v", err)
+		} else {
+			t.Log(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
 	})
 }

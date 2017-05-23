@@ -92,21 +92,7 @@ func (tx *Tx) Truncate(v interface{}) error {
 //
 // If the item does not exist then nothing is done and a nil error is returned.
 func (tx *Tx) Delete(v interface{}) error {
-	st, rv, err := tx.validateStruct(v, delete)
-	tx.errf = newErrorFactory(delete, st)
-	if tx.errs.HasError() {
-		return tx.addErr(ErrBadTransaction)
-	}
-	if err != nil {
-		return tx.addErr(err)
-	}
-	idBytes, err := st.ID.encodeStruct(rv)
-	if err != nil {
-		tx.addErr(err)
-	}
-	bkt := tx.btx.Bucket(st.FullName).Bucket(bktNameData)
-	// TODO Clean up indexes
-	return tx.addErr(bkt.Delete(idBytes))
+	return tx.put(v, delete)
 }
 
 // Insert saves a new item.
@@ -135,10 +121,10 @@ func (tx *Tx) put(v interface{}, action txAction) error {
 	if err != nil {
 		return tx.addErr(err)
 	}
-	bkt := tx.btx.Bucket(st.FullName).Bucket(bktNameData)
+	bktData := tx.btx.Bucket(st.FullName).Bucket(bktNameData)
 	id := rv.Field(st.ID.StructPos)
 	if action.canAutoIncrement() && st.ID.AutoIncrement {
-		err = tx.autoincrement(id, bkt, st)
+		err = tx.autoincrement(id, bktData, st)
 		if err != nil {
 			return tx.addErr(err)
 		}
@@ -147,23 +133,56 @@ func (tx *Tx) put(v interface{}, action txAction) error {
 	if err != nil {
 		return tx.addErr(err)
 	}
-	if action == insert && bkt.Get(idBytes) != nil {
+	oldStructBytes := bktData.Get(idBytes)
+	exists := oldStructBytes != nil
+	if action == insert && exists {
 		err = fmt.Errorf("item with ID %q already exists", fmt.Sprintf("%v", id.Interface()))
 		return tx.addErr(err)
-	} else if action == update && bkt.Get(idBytes) == nil {
+	} else if action == update && !exists {
 		err = fmt.Errorf("item with ID %q does not exist", fmt.Sprintf("%v", id.Interface()))
 		return tx.addErr(err)
+	} else if action == delete && !exists {
+		return nil
 	}
-	structBytes, err := tx.store.codec.Marshal(v)
-	if err != nil {
+	// struct data needs inserting or updating
+	if action == insert || action == update || action == upsert {
+		structBytes, err := tx.store.codec.Marshal(v)
+		if err != nil {
+			return tx.addErr(err)
+		}
+		err = bktData.Put(idBytes, structBytes)
+		if err != nil {
+			return tx.addErr(err)
+		}
+	} else if action == delete {
+		// or simple deletion
+		err = bktData.Delete(idBytes)
+		if err != nil {
+			return tx.addErr(err)
+		}
+	}
+	// when updating or deleting items stale index data needs to be removed
+	if action == update || (action == upsert && exists) || action == delete {
+		// index data currently reflects the data of the struct in the database,
+		// not the one being saved. we need to decode the old bytes into a
+		// struct and use it to delete the old index data.
+		old := reflect.New(rv.Type())
+		err = tx.store.codec.Unmarshal(oldStructBytes, old.Interface())
+		if err != nil {
+			return tx.addErr(err)
+		}
+		old = reflect.Indirect(old)
+		err = st.deleteIndexes(tx.btx.Bucket(st.FullName).Bucket(bktNameIndex), old, idBytes)
+		if err != nil {
+			return tx.addErr(err)
+		}
+	}
+	// update the index unless deleting
+	if action != delete {
+		err = st.putIndexes(tx.btx.Bucket(st.FullName).Bucket(bktNameIndex), rv, idBytes)
 		return tx.addErr(err)
 	}
-	err = bkt.Put(idBytes, structBytes)
-	if err != nil {
-		return tx.addErr(err)
-	}
-	err = st.putIndexes(tx.btx.Bucket(st.FullName).Bucket(bktNameIndex), rv, idBytes)
-	return tx.addErr(err)
+	return nil
 }
 
 func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, st structType) error {
