@@ -38,7 +38,7 @@ func Open(path string, mode os.FileMode, options *bolt.Options) (*Store, error) 
 	return st, nil
 }
 
-// Bolt returns the bolt.DB instance.
+// Bolt returns the underlying bolt.DB instance.
 func (s *Store) Bolt() *bolt.DB {
 	return s.db
 }
@@ -50,7 +50,7 @@ func (s *Store) Close() error {
 }
 
 // Read executes a function within the context of a managed read-only transaction.
-// Any error that is returned from the function is returned from the View() method.
+// Any error that is returned from the function is returned from the Read() method.
 func (s *Store) Read(fn func(*Tx) error) error {
 	return s.db.View(func(btx *bolt.Tx) error {
 		tx := &Tx{btx: btx, store: s, errs: errlist.New()}
@@ -79,7 +79,11 @@ func (s *Store) Write(fn func(*Tx) error) error {
 }
 
 // Register validates struct types for later use.
-// Structs that have not been registered can not be used.
+// This will require a write-transaction if the the struct type has never been
+// registered in this store or its definition has been changed since the last
+// call.
+// A struct's type must be registered before it can be used in combination with
+// a Store.
 func (s *Store) Register(v ...interface{}) error {
 	errs := errlist.New()
 	for _, vv := range v {

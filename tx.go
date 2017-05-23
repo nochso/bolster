@@ -90,19 +90,20 @@ func (tx *Tx) Truncate(v interface{}) error {
 
 // Delete removes the given item.
 //
-// If the item does not exist then nothing is done and a nil error is returned.
+// If the item does not exist a nil error is returned.
 func (tx *Tx) Delete(v interface{}) error {
 	return tx.put(v, delete)
 }
 
 // Insert saves a new item.
+// If an item with the same ID exists an error is returned.
 func (tx *Tx) Insert(v interface{}) error {
 	return tx.put(v, insert)
 }
 
 // Update overwrites an existing item.
 //
-// If the item does not exist, an error is returned.
+// If the item does not exist an error is returned.
 func (tx *Tx) Update(v interface{}) error {
 	return tx.put(v, update)
 }
@@ -213,7 +214,8 @@ func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, st structType) e
 	return nil
 }
 
-// Get fetches v by ID.
+// Get fetches an item of v's type by its ID.
+// v must be a pointer to a struct.
 func (tx *Tx) Get(v interface{}, id interface{}) error {
 	st, _, err := tx.validateStruct(v, get)
 	tx.errf = newErrorFactory(get, st)
