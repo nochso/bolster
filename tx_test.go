@@ -346,6 +346,31 @@ func TestTx_Get(t *testing.T) {
 			t.Log(err)
 		}
 	})
+	t.Run("nonIntegerID", func(t *testing.T) {
+		st, closer := internal.OpenTestStore(t)
+		defer closer()
+		err := st.Register(structWithTaggedID{})
+		if err != nil {
+			t.Error(err)
+		}
+		exp := &structWithTaggedID{Name: "foo"}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Insert(exp)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		act := &structWithTaggedID{}
+		err = st.Read(func(tx *bolster.Tx) error {
+			return tx.Get(act, "foo")
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		if !reflect.DeepEqual(act, exp) {
+			t.Error(pretty.Compare(act, exp))
+		}
+	})
 }
 
 func TestTx_Delete(t *testing.T) {
