@@ -74,6 +74,14 @@ func (tx *Tx) addErr(err error) error {
 	return tx.errs.Append(tx.errf.with(err))
 }
 
+func (tx *Tx) dataBkt(st structType) *bolt.Bucket {
+	return tx.btx.Bucket(st.FullName).Bucket(bktNameData)
+}
+
+func (tx *Tx) idxBkt(st structType) *bolt.Bucket {
+	return tx.btx.Bucket(st.FullName).Bucket(bktNameIndex)
+}
+
 // Truncate deletes all items of v's type.
 func (tx *Tx) Truncate(v interface{}) error {
 	st, _, err := tx.validateStruct(v, truncate)
@@ -92,80 +100,167 @@ func (tx *Tx) Truncate(v interface{}) error {
 //
 // If the item does not exist a nil error is returned.
 func (tx *Tx) Delete(v interface{}) error {
-	return tx.put(v, delete)
-}
-
-// Insert saves a new item.
-// If an item with the same ID exists an error is returned.
-func (tx *Tx) Insert(v interface{}) error {
-	return tx.put(v, insert)
-}
-
-// Update overwrites an existing item.
-//
-// If the item does not exist an error is returned.
-func (tx *Tx) Update(v interface{}) error {
-	return tx.put(v, update)
-}
-
-// Upsert either updates or inserts an item.
-func (tx *Tx) Upsert(v interface{}) error {
-	return tx.put(v, upsert)
-}
-
-func (tx *Tx) put(v interface{}, action txAction) error {
-	st, rv, err := tx.validateStruct(v, action)
-	tx.errf = newErrorFactory(action, st)
 	if tx.errs.HasError() {
 		return tx.addErr(ErrBadTransaction)
 	}
+	st, rv, err := tx.validateStruct(v, delete)
+	tx.errf = newErrorFactory(delete, st)
 	if err != nil {
 		return tx.addErr(err)
 	}
-	bktData := tx.btx.Bucket(st.FullName).Bucket(bktNameData)
-	id := rv.Field(st.ID.StructPos)
-	if action.canAutoIncrement() && st.ID.AutoIncrement {
-		err = tx.autoincrement(id, bktData, st)
-		if err != nil {
-			return tx.addErr(err)
-		}
-	}
-	idBytes, err := st.ID.encodeStruct(rv, tx.btx.Bucket(st.FullName).Bucket(bktNameIndex), action)
-	if action == delete && err == ErrNotFound {
+	bktData := tx.dataBkt(st)
+	idBytes, err := st.ID.encodeStruct(rv, tx.idxBkt(st), delete)
+	if err == ErrNotFound {
 		return nil
 	} else if err != nil {
 		return tx.addErr(err)
 	}
 	oldStructBytes := bktData.Get(idBytes)
 	exists := oldStructBytes != nil
-	if action == insert && exists {
-		err = fmt.Errorf("item with ID %q already exists", fmt.Sprintf("%v", id.Interface()))
-		return tx.addErr(err)
-	} else if action == update && !exists {
-		err = fmt.Errorf("item with ID %q does not exist", fmt.Sprintf("%v", id.Interface()))
-		return tx.addErr(err)
-	} else if action == delete && !exists {
+	if !exists {
 		return nil
 	}
-	// struct data needs inserting or updating
-	if action == insert || action == update || action == upsert {
-		structBytes, err := tx.store.codec.Marshal(v)
-		if err != nil {
-			return tx.addErr(err)
-		}
-		err = bktData.Put(idBytes, structBytes)
-		if err != nil {
-			return tx.addErr(err)
-		}
-	} else if action == delete {
-		// or simple deletion
-		err = bktData.Delete(idBytes)
+	err = bktData.Delete(idBytes)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	// when deleting items stale index data needs to be removed
+	// index data currently reflects the data of the struct in the database,
+	// not the one being saved. we need to decode the old bytes into a
+	// struct and use it to delete the old index data.
+	old := reflect.New(rv.Type())
+	err = tx.store.codec.Unmarshal(oldStructBytes, old.Interface())
+	if err != nil {
+		return tx.addErr(err)
+	}
+	old = reflect.Indirect(old)
+	err = st.deleteIndexes(tx.idxBkt(st), old, idBytes)
+	return tx.addErr(err)
+}
+
+// Insert saves a new item.
+// If an item with the same ID exists an error is returned.
+func (tx *Tx) Insert(v interface{}) error {
+	st, rv, err := tx.validateStruct(v, insert)
+	tx.errf = newErrorFactory(insert, st)
+	if tx.errs.HasError() {
+		return tx.addErr(ErrBadTransaction)
+	}
+	if err != nil {
+		return tx.addErr(err)
+	}
+	bktData := tx.dataBkt(st)
+	id := rv.Field(st.ID.StructPos)
+	if st.ID.AutoIncrement {
+		err = tx.autoincrement(id, bktData, st)
 		if err != nil {
 			return tx.addErr(err)
 		}
 	}
-	// when updating or deleting items stale index data needs to be removed
-	if action == update || (action == upsert && exists) || action == delete {
+	idBytes, err := st.ID.encodeStruct(rv, tx.idxBkt(st), insert)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	oldStructBytes := bktData.Get(idBytes)
+	exists := oldStructBytes != nil
+	if exists {
+		err = fmt.Errorf("item with ID %q already exists", fmt.Sprintf("%v", id.Interface()))
+		return tx.addErr(err)
+	}
+	structBytes, err := tx.store.codec.Marshal(v)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	err = bktData.Put(idBytes, structBytes)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	err = st.putIndexes(tx.idxBkt(st), rv, idBytes)
+	return tx.addErr(err)
+}
+
+// Update overwrites an existing item.
+//
+// If the item does not exist an error is returned.
+func (tx *Tx) Update(v interface{}) error {
+	st, rv, err := tx.validateStruct(v, delete)
+	tx.errf = newErrorFactory(delete, st)
+	if tx.errs.HasError() {
+		return tx.addErr(ErrBadTransaction)
+	}
+	if err != nil {
+		return tx.addErr(err)
+	}
+	bktData := tx.dataBkt(st)
+	id := rv.Field(st.ID.StructPos)
+	idBytes, err := st.ID.encodeStruct(rv, tx.idxBkt(st), update)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	oldStructBytes := bktData.Get(idBytes)
+	exists := oldStructBytes != nil
+	if !exists {
+		err = fmt.Errorf("item with ID %q does not exist", fmt.Sprintf("%v", id.Interface()))
+		return tx.addErr(err)
+	}
+	structBytes, err := tx.store.codec.Marshal(v)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	err = bktData.Put(idBytes, structBytes)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	// index data currently reflects the data of the struct in the database,
+	// not the one being saved. we need to decode the old bytes into a
+	// struct and use it to delete the old index data.
+	old := reflect.New(rv.Type())
+	err = tx.store.codec.Unmarshal(oldStructBytes, old.Interface())
+	if err != nil {
+		return tx.addErr(err)
+	}
+	old = reflect.Indirect(old)
+	err = st.deleteIndexes(tx.idxBkt(st), old, idBytes)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	err = st.putIndexes(tx.idxBkt(st), rv, idBytes)
+	return tx.addErr(err)
+}
+
+// Upsert either updates or inserts an item.
+func (tx *Tx) Upsert(v interface{}) error {
+	st, rv, err := tx.validateStruct(v, upsert)
+	tx.errf = newErrorFactory(upsert, st)
+	if tx.errs.HasError() {
+		return tx.addErr(ErrBadTransaction)
+	}
+	if err != nil {
+		return tx.addErr(err)
+	}
+	bktData := tx.dataBkt(st)
+	id := rv.Field(st.ID.StructPos)
+	if st.ID.AutoIncrement {
+		err = tx.autoincrement(id, bktData, st)
+		if err != nil {
+			return tx.addErr(err)
+		}
+	}
+	idBytes, err := st.ID.encodeStruct(rv, tx.idxBkt(st), upsert)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	oldStructBytes := bktData.Get(idBytes)
+	exists := oldStructBytes != nil
+	structBytes, err := tx.store.codec.Marshal(v)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	err = bktData.Put(idBytes, structBytes)
+	if err != nil {
+		return tx.addErr(err)
+	}
+	if exists {
 		// index data currently reflects the data of the struct in the database,
 		// not the one being saved. we need to decode the old bytes into a
 		// struct and use it to delete the old index data.
@@ -175,17 +270,13 @@ func (tx *Tx) put(v interface{}, action txAction) error {
 			return tx.addErr(err)
 		}
 		old = reflect.Indirect(old)
-		err = st.deleteIndexes(tx.btx.Bucket(st.FullName).Bucket(bktNameIndex), old, idBytes)
+		err = st.deleteIndexes(tx.idxBkt(st), old, idBytes)
 		if err != nil {
 			return tx.addErr(err)
 		}
 	}
-	// update the index unless deleting
-	if action != delete {
-		err = st.putIndexes(tx.btx.Bucket(st.FullName).Bucket(bktNameIndex), rv, idBytes)
-		return tx.addErr(err)
-	}
-	return nil
+	err = st.putIndexes(tx.idxBkt(st), rv, idBytes)
+	return tx.addErr(err)
 }
 
 func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, st structType) error {
@@ -229,11 +320,11 @@ func (tx *Tx) Get(v interface{}, id interface{}) error {
 	if actTypeID != expTypeID {
 		return tx.errf.with(fmt.Errorf("incompatible type of ID: expected %v, got %v", expTypeID, actTypeID))
 	}
-	idBytes, err := st.ID.encode(id, tx.btx.Bucket(st.FullName).Bucket(bktNameIndex), get)
+	idBytes, err := st.ID.encode(id, tx.idxBkt(st), get)
 	if err != nil {
 		return tx.errf.with(err)
 	}
-	bkt := tx.btx.Bucket(st.FullName).Bucket(bktNameData)
+	bkt := tx.dataBkt(st)
 	b := bkt.Get(idBytes)
 	if b == nil {
 		return tx.errf.with(ErrNotFound)
