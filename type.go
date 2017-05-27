@@ -33,6 +33,16 @@ func newStructType(t reflect.Type) (structType, error) {
 	if err != nil {
 		return *st, err
 	}
+	if !st.ID.isInteger() {
+		// non-integer IDs need to be uniquely mapped to uint64 IDs
+		idx := index{
+			Unique: true,
+			Fields: []indexField{{st.ID.StructPos, st.ID.StructField}},
+		}
+		idx.FullName = idx.getFullName()
+		st.ID.IntIndex = idx
+		st.Indexes = append(st.Indexes, idx)
+	}
 	err = st.validateBytesort()
 	return *st, err
 }
@@ -96,28 +106,49 @@ type idField struct {
 	StructPos int
 	reflect.StructField
 	AutoIncrement bool
+	IntIndex      index // non-integer type mapping to uint64
 }
 
 func (i idField) isInteger() bool {
 	return i.Type.Kind() >= reflect.Int && i.Type.Kind() <= reflect.Uint64
 }
 
-func (i idField) encode(v interface{}) ([]byte, error) {
+func (i idField) encode(v interface{}, bkt *bolt.Bucket, a txAction) ([]byte, error) {
 	f := reflect.ValueOf(v)
-	// always encode integer IDs with 8 bytes length
-	if i.isInteger() && f.Type().Size() < 8 {
-		k := f.Type().Kind()
-		if k >= reflect.Int && k <= reflect.Int64 {
-			f = f.Convert(reflect.TypeOf(int64(0)))
-		} else {
-			f = f.Convert(reflect.TypeOf(uint64(0)))
+	if i.isInteger() {
+		// always encode integer IDs with 8 bytes length
+		if f.Type().Size() < 8 {
+			k := f.Type().Kind()
+			if k >= reflect.Int && k <= reflect.Int64 {
+				f = f.Convert(reflect.TypeOf(int64(0)))
+			} else {
+				f = f.Convert(reflect.TypeOf(uint64(0)))
+			}
 		}
+		return bytesort.Encode(f.Interface())
 	}
-	return bytesort.Encode(f.Interface())
+	// non-integer IDs need to be mapped to uint64
+	b, err := i.IntIndex.get(bkt, v)
+	if err == ErrNotFound {
+		if a != insert && a != upsert {
+			return nil, err
+		}
+		// ID is unknown but we're inserting or upserting so get the next ID
+		var id uint64
+		id, err = bkt.NextSequence()
+		if err != nil {
+			return nil, err
+		}
+		return bytesort.Encode(id)
+	}
+	if a == insert {
+		return nil, fmt.Errorf("item with ID %q already exists", fmt.Sprintf("%v", v))
+	}
+	return b, err
 }
 
-func (i idField) encodeStruct(structRV reflect.Value) ([]byte, error) {
-	return i.encode(structRV.Field(i.StructPos).Interface())
+func (i idField) encodeStruct(structRV reflect.Value, bkt *bolt.Bucket, a txAction) ([]byte, error) {
+	return i.encode(structRV.Field(i.StructPos).Interface(), bkt, a)
 }
 
 func newIDField(t reflect.Type) (idField, error) {
@@ -206,6 +237,36 @@ func (i index) getFullName() []byte {
 		fmt.Fprintf(buf, ",%s %s %s", field.Type.PkgPath(), field.Type, field.Name)
 	}
 	return buf.Bytes()
+}
+
+func (i index) get(bkt *bolt.Bucket, v ...interface{}) ([]byte, error) {
+	if !i.Unique {
+		return nil, errors.New("index.get only works on unique indexes")
+	}
+	if len(v) != len(i.Fields) {
+		return nil, errors.New("amount of values does not match count of index fields")
+	}
+	bkt = bkt.Bucket(i.FullName)
+	key := &bytes.Buffer{}
+	for n, field := range i.Fields {
+		b, err := bytesort.Encode(v[n])
+		if err != nil {
+			return nil, err
+		}
+		key.Write(b)
+		if field.Type.Kind() == reflect.String && n < len(i.Fields)-1 {
+			bkt = bkt.Bucket(key.Bytes())
+			if bkt == nil {
+				return nil, ErrNotFound
+			}
+			key.Reset()
+		}
+	}
+	b := bkt.Get(key.Bytes())
+	if b == nil {
+		return nil, ErrNotFound
+	}
+	return b, nil
 }
 
 func (i index) put(bkt *bolt.Bucket, rv reflect.Value, id []byte) error {

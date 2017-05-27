@@ -3,6 +3,7 @@ package bolster_test
 import (
 	"flag"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/kylelemons/godebug/pretty"
@@ -124,6 +125,71 @@ func TestTx_Insert_withoutAutoincrement(t *testing.T) {
 		})
 		if err != nil {
 			t.Error(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+}
+
+func TestTx_Insert_NonIntegerID(t *testing.T) {
+	t.Run("single", func(t *testing.T) {
+		st, closer := internal.OpenTestStore(t)
+		defer closer()
+		err := st.Register(structWithTaggedID{})
+		if err != nil {
+			t.Error(err)
+		}
+		itm := &structWithTaggedID{Name: "foo"}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Insert(itm)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		if itm.Name != "foo" {
+			t.Errorf("expected Name = \"foo\", got %q", itm.Name)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("multiple", func(t *testing.T) {
+		st, closer := internal.OpenTestStore(t)
+		defer closer()
+		err := st.Register(structWithTaggedID{})
+		if err != nil {
+			t.Error(err)
+		}
+		err = st.Write(func(tx *bolster.Tx) error {
+			itm := &structWithTaggedID{}
+			for i := 0; i < 16; i++ {
+				itm.Name = strings.Repeat("z", i)
+				err := tx.Insert(itm)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("duplicate", func(t *testing.T) {
+		st, closer := internal.OpenTestStore(t)
+		defer closer()
+		err := st.Register(structWithTaggedID{})
+		if err != nil {
+			t.Error(err)
+		}
+		itm := &structWithTaggedID{Name: "foo"}
+		err = st.Write(func(tx *bolster.Tx) error {
+			tx.Insert(itm)
+			tx.Insert(itm)
+			return nil
+		})
+		if err == nil {
+			t.Error("expected error, got nil")
+		} else {
+			t.Log(err)
 		}
 		internal.GoldStore(t, st, *updateGold)
 	})

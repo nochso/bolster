@@ -130,8 +130,10 @@ func (tx *Tx) put(v interface{}, action txAction) error {
 			return tx.addErr(err)
 		}
 	}
-	idBytes, err := st.ID.encodeStruct(rv)
-	if err != nil {
+	idBytes, err := st.ID.encodeStruct(rv, tx.btx.Bucket(st.FullName).Bucket(bktNameIndex), action)
+	if action == delete && err == ErrNotFound {
+		return nil
+	} else if err != nil {
 		return tx.addErr(err)
 	}
 	oldStructBytes := bktData.Get(idBytes)
@@ -227,7 +229,7 @@ func (tx *Tx) Get(v interface{}, id interface{}) error {
 	if actTypeID != expTypeID {
 		return tx.errf.with(fmt.Errorf("incompatible type of ID: expected %v, got %v", expTypeID, actTypeID))
 	}
-	idBytes, err := st.ID.encode(id)
+	idBytes, err := st.ID.encode(id, tx.btx.Bucket(st.FullName).Bucket(bktNameIndex), get)
 	if err != nil {
 		return tx.errf.with(err)
 	}
