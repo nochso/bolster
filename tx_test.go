@@ -240,7 +240,6 @@ func TestTx_Insert_withAutoincrement(t *testing.T) {
 		}
 		internal.GoldStore(t, st, *updateGold)
 	})
-	// TODO Add tests with more int/uint types
 	t.Run("overflowIDinSingleTransaction", func(t *testing.T) {
 		err := st.Write(func(tx *bolster.Tx) error {
 			return tx.Truncate(structWithAutoincrement{})
@@ -272,6 +271,94 @@ func TestTx_Insert_withAutoincrement(t *testing.T) {
 		for i := 0; i < 257; i++ {
 			err = st.Write(func(tx *bolster.Tx) error {
 				return tx.Insert(&structWithAutoincrement{})
+			})
+			errs.Append(err)
+		}
+		if errs.ErrorOrNil() == nil {
+			t.Error("expected at least one error, got none")
+		} else {
+			t.Log(errs.Error())
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+}
+
+type structWithAutoincrementInt8 struct {
+	ID int8 `bolster:"inc"`
+}
+
+func TestTx_Insert_withAutoincrementInt8(t *testing.T) {
+	st, closer := internal.OpenTestStore(t)
+	defer closer()
+
+	err := st.Register(structWithAutoincrementInt8{})
+	if err != nil {
+		t.Error(err)
+	}
+	t.Run("single", func(t *testing.T) {
+		exp := &structWithAutoincrementInt8{ID: 1}
+		act := &structWithAutoincrementInt8{}
+		err = st.Write(func(tx *bolster.Tx) error {
+			return tx.Insert(act)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		if !reflect.DeepEqual(exp, act) {
+			t.Error(pretty.Compare(act, exp))
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("multipleInSingleTransaction", func(t *testing.T) {
+		actuals := make([]structWithAutoincrementInt8, 5)
+		err = st.Write(func(tx *bolster.Tx) error {
+			tx.Truncate(actuals[0])
+			for i := range actuals {
+				tx.Insert(&actuals[i])
+			}
+			return nil
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		for _, act := range actuals {
+			if act.ID == 0 {
+				t.Errorf("expected ID of struct to be set, got %d", act.ID)
+			}
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("overflowIDinSingleTransaction", func(t *testing.T) {
+		err := st.Write(func(tx *bolster.Tx) error {
+			return tx.Truncate(structWithAutoincrementInt8{})
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		err = st.Write(func(tx *bolster.Tx) error {
+			for i := 0; i < 129; i++ {
+				tx.Insert(&structWithAutoincrementInt8{})
+			}
+			return nil
+		})
+		if err == nil {
+			t.Error("expected error, got nil")
+		} else {
+			t.Log(err)
+		}
+		internal.GoldStore(t, st, *updateGold)
+	})
+	t.Run("overflowIDinMultipleTransactions", func(t *testing.T) {
+		err := st.Write(func(tx *bolster.Tx) error {
+			return tx.Truncate(structWithAutoincrementInt8{})
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		errs := errlist.New()
+		for i := 0; i < 129; i++ {
+			err = st.Write(func(tx *bolster.Tx) error {
+				return tx.Insert(&structWithAutoincrementInt8{})
 			})
 			errs.Append(err)
 		}
