@@ -67,6 +67,7 @@ func (tx *Tx) validateStruct(v interface{}, action txAction) (structType, reflec
 	if !ok {
 		return st, rv, fmt.Errorf("unregistered struct: %v", rt)
 	}
+	tx.errf = newErrorFactory(action, st)
 	return st, rv, nil
 }
 
@@ -85,7 +86,6 @@ func (tx *Tx) idxBkt(st structType) *bolt.Bucket {
 // Truncate deletes all items of v's type.
 func (tx *Tx) Truncate(v interface{}) error {
 	st, _, err := tx.validateStruct(v, truncate)
-	tx.errf = newErrorFactory(truncate, st)
 	if tx.errs.HasError() {
 		return tx.addErr(ErrBadTransaction)
 	}
@@ -104,7 +104,6 @@ func (tx *Tx) Delete(v interface{}) error {
 		return tx.addErr(ErrBadTransaction)
 	}
 	st, rv, err := tx.validateStruct(v, delete)
-	tx.errf = newErrorFactory(delete, st)
 	if err != nil {
 		return tx.addErr(err)
 	}
@@ -142,7 +141,6 @@ func (tx *Tx) Delete(v interface{}) error {
 // If an item with the same ID exists an error is returned.
 func (tx *Tx) Insert(v interface{}) error {
 	st, rv, err := tx.validateStruct(v, insert)
-	tx.errf = newErrorFactory(insert, st)
 	if tx.errs.HasError() {
 		return tx.addErr(ErrBadTransaction)
 	}
@@ -184,7 +182,6 @@ func (tx *Tx) Insert(v interface{}) error {
 // If the item does not exist an error is returned.
 func (tx *Tx) Update(v interface{}) error {
 	st, rv, err := tx.validateStruct(v, delete)
-	tx.errf = newErrorFactory(delete, st)
 	if tx.errs.HasError() {
 		return tx.addErr(ErrBadTransaction)
 	}
@@ -231,7 +228,6 @@ func (tx *Tx) Update(v interface{}) error {
 // Upsert either updates or inserts an item.
 func (tx *Tx) Upsert(v interface{}) error {
 	st, rv, err := tx.validateStruct(v, upsert)
-	tx.errf = newErrorFactory(upsert, st)
 	if tx.errs.HasError() {
 		return tx.addErr(ErrBadTransaction)
 	}
@@ -311,7 +307,6 @@ func (tx *Tx) autoincrement(id reflect.Value, bkt *bolt.Bucket, st structType) e
 // v must be a pointer to a struct.
 func (tx *Tx) Get(v interface{}, id interface{}) error {
 	st, _, err := tx.validateStruct(v, get)
-	tx.errf = newErrorFactory(get, st)
 	if err != nil {
 		return tx.errf.with(err)
 	}
